@@ -67,7 +67,8 @@ _UNSUPPORTED_COMMANDS: dict[str, str] = {
 # Commands whose target Pandoc's LaTeX reader opens by itself (observed with Pandoc 3.1.3: the file's text lands
 # in the document, from any path, including absolute ones and ones outside the project). latex2word does not
 # follow, stage or contain them, so they are errors: the content is either lost or read from an unchecked path.
-_PANDOC_READS_TARGET = frozenset({"subfile", "lstinputlisting", "inputminted"})
+_PANDOC_READS_TARGET = frozenset({"subfile", "lstinputlisting", "inputminted", "includesvg"})
+_STY_READ_COMMANDS = frozenset({"input", "include", "includegraphics"}) | _PANDOC_READS_TARGET
 _UNCONTAINED_READ = (
     "; Pandoc would open the target itself, outside latex2word's project-root containment and staging"
 )
@@ -386,9 +387,14 @@ class _Walker:
         self._stack.append(rel)
         try:
             if rel in self._package_files:
+                # Pandoc loads local .sty files (not .cls files) and their macros may \input or \includegraphics any
+                # path: in a .sty the file-reading commands get the same containment checks as in the document
+                reads = _STY_READ_COMMANDS if rel.lower().endswith(".sty") else frozenset()
                 for command in iter_commands(masked):
                     if command.name in _PACKAGE_COMMANDS:
                         self._handle_package(command, rel, masked, SourceLocation(rel, lines.line(command.start)))
+                    elif command.name in reads:
+                        self._dispatch(command, rel, masked, lines)
                 return
             for command in iter_commands(masked):
                 self._dispatch(command, rel, masked, lines)
@@ -398,6 +404,10 @@ class _Walker:
     def _dispatch(self, command: Command, rel: str, masked: str, lines: LineIndex) -> None:
         name = command.name
         location = SourceLocation(rel, lines.line(command.start))
+        if masked[command.end : command.end + 1] == "@":
+            return  # an internal macro such as \input@path (\makeatletter), not the command itself
+        if name in ("input", "include", "includegraphics") and masked[skip_ws(masked, command.end) : skip_ws(masked, command.end) + 1] == "}":
+            return  # named as a definition target (\renewcommand{\includegraphics}...): not an invocation
         if name in ("input", "include"):
             self._handle_tex_include(command, rel, masked, location)
         elif name == "includegraphics":
@@ -738,7 +748,14 @@ class _Walker:
             return
         for name in split_top_level(" ".join(arg[0].split())):
             name = name.strip().strip('"')
-            if not name or _is_dynamic(name):
+            if not name:
+                continue
+            if _is_dynamic(name):
+                if suffix == ".sty":  # Pandoc expands the macro and loads the package file from any path
+                    self._finding(
+                        "dynamic-path", Severity.ERROR,
+                        f"\\{command.name}{{{name}}}: package name is not a literal" + _UNCONTAINED_READ, location,
+                    )
                 continue
             candidate = name if name.lower().endswith(suffix) else name + suffix
             probe = self._probe(candidate)

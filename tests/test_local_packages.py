@@ -82,8 +82,11 @@ def test_package_text_is_not_scanned_for_figures_or_includes(tmp_path: Path):
             "refs.bib": "",
         },
     )
-    assert [e.kind for e in graph.edges] == [EdgeKind.PACKAGE]
-    assert graph.tex_files == ["main.tex"]
+    # Audit 2026-11 (reports/audit/findings.md, F-02 follow-up): Pandoc loads local .sty files, so their \input and
+    # \includegraphics are followed and contained like the document's own (they used to be ignored, which let a
+    # .sty read files outside the project). \bibliography in a package is still not followed.
+    assert [e.kind for e in graph.edges] == [EdgeKind.PACKAGE, EdgeKind.GRAPHIC, EdgeKind.INPUT]
+    assert graph.tex_files == ["main.tex", "other.tex"]
     assert not graph.findings
 
 

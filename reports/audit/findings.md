@@ -6,17 +6,18 @@ Priorities: P0 data loss / security / serious math alteration · P1 broken core 
 P2 compatibility / reliability / significant formatting · P3 minor.
 
 Environment for every executed result: Pandoc **3.1.3** (not the certified 3.12), no TeX, no Word
-(`logs/environment.txt`). Fixes: commits `2d37916` (F-01..F-04) and `a61debb` (F-05).
+(`logs/environment.txt`). Fixes: commits `2d37916` (F-01..F-04), `a61debb` (F-05) and a follow-up commit after the
+independent review (§"Independent review and follow-up").
 
 ## Summary
 
 | ID | Title | P | Reproduced | Fixed | Regression test |
 |---|---|---|---|---|---|
-| F-01 | Alignment row starting with `[` silently deleted from equations | P0 | VERIFIED | yes | `test_audit_regressions.py::test_f01_*` |
-| F-02 | Untrusted LaTeX makes Pandoc read files outside the project into the DOCX | P0 (untrusted input) | VERIFIED | yes (known residual risk) | `::test_f02_*` |
+| F-01 | Alignment row starting with `[` silently deleted from equations | P0 | VERIFIED | yes (incl. review follow-ups) | `test_audit_regressions.py::test_f01_*`, `::test_f01b_*` |
+| F-02 | Untrusted LaTeX makes Pandoc read files outside the project into the DOCX | P0 (untrusted input) | VERIFIED | **partially**: 10 vectors closed; 2 known scanner/reader mismatches remain open | `::test_f02_*`, `::test_f02b_*` |
 | F-03 | `\label{..{..}..}` with nested braces not stripped from math | P2 | VERIFIED | yes | `::test_f03_*` |
-| F-04 | Reference command dropped by the reader without diagnostic | P1 | VERIFIED (3.1.3) | detection added | `::test_f04_*` |
-| F-05 | `build` ignores the Pandoc compatibility verdict that `doctor` computes; equation numbers lost silently | P1 | VERIFIED | yes | `::test_f05_*` |
+| F-04 | Reference command dropped by the reader without diagnostic | P1 | VERIFIED (3.1.3) | detection added (per label, not per occurrence) | `::test_f04_*`, `::test_f04b_*` |
+| F-05 | `build` ignores the Pandoc compatibility verdict that `doctor` computes; equation numbers lost silently | P1 | VERIFIED | yes; probe now checks the equation wrapper and `\Cref` | `::test_f05_*`, `::test_f05b_*` |
 | F-06 | `--output` may overwrite project sources; default output lies inside the project | P2 | static | no | — |
 | F-07 | TeX may read arbitrary files while rendering TikZ (`openin_any`) | P2 | BLOCKED (no TeX) | no | — |
 | F-08 | Every build fails on Pandoc 3.1.3 (its own `styles.xml` out of schema order) | P3 | VERIFIED | no (env.) | — |
@@ -157,6 +158,39 @@ this mismatch. Proposed: warn when biblatex `style=` differs from the CSL in use
 `\begin{align} a&=b \\ c&=d \end{align}` (two numbered rows) yields `L2W-E-MATH-003` (explicit failure, not
 silent). This is common in theses; such documents fail until every multi-row numbered environment is split.
 Documented in `docs/pandoc-ast-findings.md`. Roadmap R5.
+
+## Independent review and follow-up
+
+A separate agent with its own context reviewed `2d37916` and `a61debb` read-only and tried to invalidate each fix by
+executing builds and module calls (report kept in the session; its claims were re-executed here before acting).
+
+| Fix | Reviewer verdict | Re-verified here | Follow-up |
+|---|---|---|---|
+| F-01 | partially fixed | yes | `eqnarray` rows are split twice, so `\\[2pt] [x]` still lost `[x]` → guard after the first split. `alignat{2}` lost its column count on rebuild and then ate the first cell (pre-existing) → argument kept. Guard `{}` added where texmath does not need it, giving an extra zero-width run in Word (minor regression) → only rows after the first in a rebuilt array, and kernel wrapper rows |
+| F-02 | not fixed against the threat model | `.sty` and `\includesvg` leaks re-executed (canary embedded) | local `.sty` files now get the containment checks (Pandoc loads them); macro-built `\usepackage{\x}` is an error; `\includesvg` is an error. False errors removed: `\input@path` (internal name), `\renewcommand{\includegraphics}` (definition target) |
+| F-03 | confirmed fixed | — | — |
+| F-04 | partially fixed | false positive re-executed | a `\ref` inside an **unused** macro body made a valid build fail → references inside definition bodies are excluded |
+| F-05 | partially fixed | yes | the probe rejected 3.1.3 only through the unrelated `\linewidth` fact → probe also checks "equation environment kept in the math string" and "`\Cref` → `ref+Label`" (the facts pinned in `tests/test_pandoc_ast.py:67,82`) |
+
+Regression tests for the follow-ups: 11 tests, all failing on the pre-follow-up code
+(`logs/followup-before-fix.log`) and passing after (`logs/followup-after-fix.log`); full-suite failure set unchanged.
+
+**Still open (reported by the review, not fixed):**
+
+* F-02 residual: `\iffalse … \ifx … \fi \input{/abs} \fi`. latex2word's masker treats `\ifx` as nested and masks
+  up to the second `\fi`; Pandoc 3.1.3 ends at the first and reads the file. Also, a `filecontents` body is masked by
+  latex2word but parsed by Pandoc. Both are scanner/reader disagreements: the deny-list approach cannot close this
+  class. Only R3 (single flattened input + `pandoc --sandbox`) can. **Untrusted input remains unsupported.**
+* F-02 trade-offs (fail-safe errors on valid documents): `\let\oldinput\input` is an error (indistinguishable from
+  the leaking alias). `\newcommand{\fig}[1]{\includegraphics{#1}}` is an error; verified that at `35547d4` the same
+  document already failed (`L2W-E-FIG-007`, image not staged), so the outcome is unchanged and only the message
+  is earlier.
+* F-04: per-label check; `\Cref{a}` dropped while `\ref{a}` survives elsewhere is not detected (executed by the
+  reviewer: "As shows, see also 1.").
+* F-05: a probe timeout is reported as UNSUPPORTED ("timed out"), which is misleading for transient slowness. The API
+  pin `(1,23,1)` would reject a future pandoc-api-version 1.23.2+ (inferred, not tested).
+* Test caveat: the F-01/F-03 Lua tests load the filter from the repository path, so they test the working tree, not
+  an installed package.
 
 ## Rejected hypotheses (tested, no defect)
 

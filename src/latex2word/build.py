@@ -598,6 +598,8 @@ def _lost_references(scan: Any, report: dict[str, Any], source_scan: Any = None)
     for reference in scan.references:
         if reference.command not in _LINKED_REFERENCE_COMMANDS or reference.label in seen or reference.label in reported:
             continue
+        if reference.in_definition:  # a macro body is only text until used (and may never be used)
+            continue
         reported.add(reference.label)
         findings.append(
             Finding(

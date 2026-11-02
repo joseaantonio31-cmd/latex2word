@@ -17,6 +17,10 @@ against it); "After" = on the fix commits.
 | `::test_f02_commands_pandoc_does_not_open_stay_warnings` | no over-blocking | needless build failures | severity | unit | PASS (control) | PASS |
 | `::test_f04_*` ×3 | references reach the document | silent reference loss | hand-built scan + report | unit | 3 FAIL | 3 PASS |
 | `::test_f05_*` ×2 | build honours Pandoc classification | silent use of an unsupported Pandoc | injected assessment | unit | 2 FAIL | 2 PASS |
+| `::test_f01b_*` ×3 | eqnarray double split, alignat argument, no needless guard | review findings | module output | unit | 3 FAIL | 3 PASS |
+| `::test_f02b_*` ×6 | `.sty`, macro `\usepackage`, `\includesvg` are errors; `\input@path`, redefinition targets are not | review findings / false errors | severity | unit | 6 FAIL | 6 PASS |
+| `::test_f04b_*` | unused macro body is not a lost reference | review false positive | scan + report | unit | FAIL | PASS |
+| `::test_f05b_*` | probe detects wrapper stripping and dropped `\Cref` | review finding | synthetic AST | unit | FAIL | PASS |
 | `test_audit_oracle::*` ×9 | the oracle detects faults | blind oracle | fault injection | meta | n/a (new tool) | PASS |
 | `test_audit_e2e::test_build_is_byte_reproducible…` | determinism, package integrity | non-reproducible output, broken package | SHA-256, oracle | e2e (harness bypasses under 3.1.3) | n/a | PASS |
 | `test_audit_e2e::test_math_structure_matches_the_source` | OMML structure | wrong/flattened math | element counts from source | e2e | n/a | PASS |
@@ -32,6 +36,7 @@ checked separately: 2 failed on the pre-F-05 `build.py`), `logs/regressions-afte
 | `35547d4` baseline | 1012 | 92 | 18 | 9 | `logs/baseline-pytest-pandoc-3.1.3.log` |
 | `2d37916` (F-01..F-04) | 1033 + new | 92 (identical set) | 18 | 9 | (re-run during audit) |
 | `a61debb` (F-05) | 986 | 141 | 30 | 9 | `logs/after-fix-pytest-pandoc-3.1.3.log` |
+| review follow-up | 997 | 141 (identical set) | 30 | 9 | `logs/after-followup-pytest-pandoc-3.1.3.log` |
 
 Baseline failure causes (classified): Pandoc 3.1.3 AST differences (equation wrapper stripped, `\Cref` dropped,
 `\autoref` typed `autoref`, widths not converted to %), missing `rsvg-convert` for SVG, the schema-order error of F-08,
@@ -46,5 +51,6 @@ is **BLOCKED**, so no claim is made that the fixes keep the certified suite gree
 * Workspace path changed between two builds → identical output bytes (determinism).
 * `\\[2pt]` vs `\\ [2pt]` inside `aligned` must differ (spacing vs content); inside `array` they must not.
 * Each containment vector tried in literal, macro, wrapper-macro and `\let`-alias form.
+* Not covered by tests: the two open F-02 leaks (`\iffalse`, `filecontents`), by design until R3.
 * Not done: generated property-based tests (no `hypothesis` installed). Recommended for `l2w_math.lua`
   (random cells/rows → linearised OMML must contain every cell token).

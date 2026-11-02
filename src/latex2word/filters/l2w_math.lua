@@ -257,10 +257,10 @@ local function normalize_inner(s)
     out[#out + 1] = s:sub(pos, b - 1)
     local body, n_inner = normalize_inner(s:sub(body_start, close_start - 1))
     local rows, columns = {}, user_columns or 1
-    for _, row in ipairs(split_rows(body, kernel_rows_of(name))) do
+    for r, row in ipairs(split_rows(body, kernel_rows_of(name))) do
       local cells = top_split(row, 'cell')
       for k, cell in ipairs(cells) do cells[k] = trim(cell) end
-      cells[1] = guard_row_start(cells[1])
+      if r > 1 then cells[1] = guard_row_start(cells[1]) end
       columns = math.max(columns, #cells)
       rows[#rows + 1] = cells
     end
@@ -371,7 +371,7 @@ function M.analyze(text, display)
     fail('L2W-E-MATH-003', cmd .. ' is not supported in equations; split the equation or number it with \\label')
   end
 
-  local wrapper_name, wrapper
+  local wrapper_name, wrapper, wrapper_arg
   local body = text
   if display then
     local name = text:match('^\\begin%s*{([%a]+%*?)}')
@@ -383,7 +383,10 @@ function M.analyze(text, display)
         body = text:sub(#head + 1, close_start - 1)
         if wrapper.arg then
           local _, arg_end = body:find('^%s*{[^{}]*}')
-          if arg_end then body = body:sub(arg_end + 1) end
+          if arg_end then
+            wrapper_arg = trim(body:sub(1, arg_end))
+            body = body:sub(arg_end + 1)
+          end
         end
       end
     end
@@ -403,7 +406,7 @@ function M.analyze(text, display)
       elseif #labels > 0 then
         fail('L2W-E-LABEL-002', 'label "' .. labels[1] .. '" is attached to an unnumbered equation row')
       end
-      kept[#kept + 1] = kernel_rows_of(wrapper_name) and stripped or guard_row_start(trim(stripped))
+      kept[#kept + 1] = kernel_rows_of(wrapper_name) and guard_row_start(trim(stripped)) or stripped
     end
     if numbered_rows > 1 then
       fail('L2W-E-MATH-003', 'the numbered multi-row environment "' .. wrapper_name
@@ -413,7 +416,9 @@ function M.analyze(text, display)
     result.numbered = numbered_rows == 1
     body = table.concat(kept, ' \\\\ ')
     if wrapper.align then
-      body = '\\begin{' .. (wrapper_name:gsub('%*$', '')) .. '} ' .. body .. ' \\end{' .. (wrapper_name:gsub('%*$', '')) .. '}'
+      local env = wrapper_name:gsub('%*$', '')
+      -- alignat needs its column count back, or the first cell would be read as that argument
+      body = '\\begin{' .. env .. '}' .. (wrapper_arg or '') .. ' ' .. body .. ' \\end{' .. env .. '}'
     else
       body = '\\begin{' .. wrapper.name .. '} ' .. body .. ' \\end{' .. wrapper.name .. '}'
     end

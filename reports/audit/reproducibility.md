@@ -13,7 +13,8 @@ upstream binary was refused by the session permission policy), TeX, dvisvgm, rsv
 | `35547d4c516c7bcfd65530686bd46b18e703c5ea` | audit start (= `origin/main`) |
 | `2d37916` | F-01..F-04 fixes, regression tests, oracle, clean fixture, harness |
 | `a61debb` | F-05 fix |
-| (next commit) | these reports |
+| `258af10` | reports |
+| (follow-up commit) | fixes from the independent review + report updates |
 
 No original fixture was modified. New fixtures live in `tests/fixtures/audit/`. The only change to an existing test
 is the marked assertion in `tests/test_source_graph.py` (F-02).

@@ -37,10 +37,16 @@ Before the fix, each of these reached `preliminary.docx` with the canary text or
 | `\subfile{/abs}` | error (text already in the workspace DOCX) | error, Pandoc never runs |
 | wrapper `\newcommand{\inp}[1]{\input{#1}}` | warning | error (the `#1` makes the path dynamic) |
 
+| local `.sty` macro that calls `\input{/abs}` or `\includegraphics{/abs}` (found by the independent review) | none (`.sty` text was not scanned) | `outside-root` error |
+| `\def\x{/abs/evil}\usepackage{\x}` (review) | none | error |
+| `\includesvg{/abs/file}` (review; embeds any file) | warning | error |
+| `\iffalse \ifx \fi \input{/abs} \fi` (review) | none | **still leaks** (masker and Pandoc disagree on `\if` nesting) |
+| `\input{/abs}` inside a `filecontents` body (review) | none | **still leaks** (masked by latex2word, parsed by Pandoc) |
+
 Not affected (tested): literal `\include{/abs}` and `\usepackage{/abs}` (already errors); `\verbatiminput`,
 `\import`, `\InputIfFileExists`, `\csname input\endcsname`, `\loadglsentries` (Pandoc 3.1.3 does not read them).
 
-**Residual risk.** This is a deny-list on a scanner that does not expand macros. The structural fix (roadmap R3)
+**Residual risk: untrusted input is not supported.** Two leaks remain open (above). This is a deny-list on a scanner that does not expand macros. The structural fix (roadmap R3)
 is to give Pandoc only one flattened file and run it with `--sandbox`, so the reader cannot open anything else.
 Until then, treat untrusted projects as a residual risk.
 
