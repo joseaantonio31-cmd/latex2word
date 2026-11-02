@@ -5,10 +5,12 @@ latex2word is an experimental private preview. The limitations below are known a
 ## Security
 
 - **latex2word currently assumes trusted LaTeX input. Do not use it to process untrusted or third-party LaTeX
-  projects.** With Pandoc 3.12/3.13, Pandoc's LaTeX reader can still be made to read a file outside the project
-  through `filecontents`; the opt-in confined reader (`LATEX2WORD_EXPERIMENTAL_CONFINED_READER=1`) closes this but is
-  not the default yet. TeX may read any readable file (`\input`, `\openin`) while rendering a TikZ figure. Details and
-  the planned structural fixes: [SECURITY.md](../SECURITY.md).
+  projects.** Pandoc's LaTeX reader is confined by default and cannot read outside the validated project, but TeX
+  may read any readable file (`\input`, `\openin`) while rendering a TikZ, circuitikz or pgfplots figure (audit F-07,
+  not yet isolated). Details: [SECURITY.md](../SECURITY.md).
+- **The confined reader refuses what it cannot flatten** (`L2W-E-CONFINE-004`) and any read outside the flattened
+  source (`L2W-E-CONFINE-001`). `LATEX2WORD_UNSAFE_LEGACY_READER=1` restores the former unconfined reader to diagnose
+  such a project; it is unsafe and warned (`L2W-W-CONFINE-005`).
 
 ## Rendering
 

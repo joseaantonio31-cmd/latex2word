@@ -1,7 +1,8 @@
-"""EXPERIMENTAL (audit R3): structural confinement of Pandoc's LaTeX reader.
+"""Structural confinement of Pandoc's LaTeX reader (audit R3): the production read path.
 
-Not used by the production build unless ``LATEX2WORD_EXPERIMENTAL_CONFINED_READER=1`` is set
-(see ``build.run_build``). Design and evidence: ``reports/audit/remediation-phase2.md``.
+``build.run_build`` always reads the LaTeX this way; ``LATEX2WORD_UNSAFE_LEGACY_READER=1`` restores the
+single unconfined Pandoc run for diagnosis only (warning ``L2W-W-CONFINE-005``). Design and evidence:
+``reports/audit/remediation-phase2.md``.
 
 Why: latex2word's scanner and Pandoc's reader interpret TeX differently (``\\iffalse`` nesting,
 ``filecontents``, aliases...), so a deny-list over the scanner cannot prove what Pandoc will read.
@@ -12,7 +13,9 @@ The structural answer splits the Pandoc run in two:
    text; every local ``.sty`` that latex2word resolved is inlined into the preamble (a package list
    ``\\usepackage[o]{a,mine,b}`` becomes ``\\usepackage[o]{a}``, inlined ``mine.sty``, ``\\usepackage[o]{b}``).
    A source map keeps the original file and offset of every flattened character.
-2. **confined reader**: ``pandoc --sandbox --verbose -f latex -t json flat.tex``. Under ``--sandbox`` the
+2. **confined reader**: ``pandoc --sandbox --verbose -f latex -t json [profile pandoc.extra_args] flat.tex``
+   (the profile's arguments reach the reader as in a single-pass run; one that needs a file is refused by the
+   sandbox and fails the build). Under ``--sandbox`` the
    reader may read only the files named on its command line (observed with Pandoc 3.1.3, 3.12 and 3.13:
    ``\\input``, ``\\include``, ``\\usepackage{local}``, ``\\lstinputlisting``, ``\\inputminted``, ``\\subfile``
    are all refused). Every refused read is reported as ``L2W-E-CONFINE-001``: it is content that did not
@@ -36,7 +39,7 @@ from __future__ import annotations
 import json
 import os
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -203,13 +206,14 @@ class ConfinedRead:
 
 def read_confined(
     pandoc: str, flat: FlatSource, graph: SourceGraph, workdir: Path, *, timeout_s: float, runner: Runner = run_command,
+    extra_args: Sequence[str] = (),
 ) -> ConfinedRead:
     """Run the confined reader on ``flat`` (written to ``workdir``); refused reads become errors."""
     source = workdir / FLATTENED_NAME
     source.write_text(flat.text, encoding="utf-8", newline="\n")
     # --verbose: a refused \usepackage is reported only at INFO level (Pandoc 3.12/3.13), so without it a local package
     # the flattener did not inline would vanish silently
-    argv = [pandoc, "--sandbox", "--verbose", "--from", "latex", "--to", "json", FLATTENED_NAME]
+    argv = [pandoc, "--sandbox", "--verbose", "--from", "latex", "--to", "json", *extra_args, FLATTENED_NAME]
     result = runner(argv, timeout=timeout_s, cwd=workdir)
     findings: list[Finding] = []
     line_starts = [0] + [i + 1 for i, ch in enumerate(flat.text) if ch == "\n"]

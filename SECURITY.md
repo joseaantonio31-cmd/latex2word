@@ -6,9 +6,14 @@
 projects.**
 
 "Trusted" means that you would also be willing to compile the project with your own TeX installation. latex2word
-reads the project and runs Pandoc and, for TikZ/pgfplots figures, TeX on it. The checks it applies are designed to
-stop accidents and to report constructs it cannot convert. They are not a sandbox that holds against a document
-written to read files from your machine.
+reads the project and runs Pandoc and, for TikZ/pgfplots figures, TeX on it. The two have different boundaries:
+
+| Process | Boundary today |
+|---|---|
+| Pandoc's LaTeX reader | **confined by default**: it reads one flattened file of validated content under `pandoc --sandbox` (audit F-02, below) |
+| TeX for TikZ/circuitikz/pgfplots figures | **not isolated**: it can read any file the user can read (audit F-07, below) |
+
+Because the TeX side is not isolated, latex2word as a whole is not a sandbox for hostile documents.
 
 What latex2word does guarantee for trusted input:
 
@@ -21,25 +26,28 @@ What latex2word does guarantee for trusted input:
 | TeX shell escape is off | `latex -no-shell-escape` for figures |
 | XML parsing does not resolve entities or fetch the network | hardened `lxml` parser; SVGs with entity declarations are refused |
 | Literal paths outside the project are refused | `\input`, `\include`, `\includegraphics`, `\usepackage`, bibliography and data files that resolve outside the project root (also through symlinks) are errors |
+| Pandoc's LaTeX reader reads only validated content | the confined reader (below): a refused read is `L2W-E-CONFINE-001`, an image outside the staged project `L2W-E-CONFINE-002` |
+| The DOCX carries no path of the build machine | the finaliser removes Pandoc's `csl` custom property (the CSL file's local path) |
 
-## Why untrusted input is out of scope today
+## Pandoc's LaTeX reader (audit F-02): confined by default
 
-### Pandoc's LaTeX reader (audit F-02)
+latex2word scans the project to decide what Pandoc may read; Pandoc's reader then interprets the same TeX by itself,
+and the two interpretations differ (Pandoc expands macros and aliases, and ends conditionals and `filecontents`
+differently). A deny-list in the scanner cannot prove what Pandoc will read: `\input{/path}` inside a `filecontents`
+body made Pandoc 3.12 and 3.13 read an arbitrary file into the DOCX, `\iffalse … \ifx … \fi \input{/path} \fi` did
+so with Pandoc 3.1.3.
 
-latex2word scans the project to decide what Pandoc may read; Pandoc's reader then interprets the same TeX by itself.
-The two interpretations differ: Pandoc expands macros and aliases, and it ends conditionals and `filecontents`
-differently from latex2word's scanner. Known constructs that made Pandoc read files from outside the project are now
-errors, but scanner/reader disagreements remain:
+The build therefore never lets Pandoc's LaTeX reader see the project. The staged, validated source graph is
+flattened into one file (resolved `\input`/`\include` files and local `.sty` packages inlined), read by
+`pandoc --sandbox -f latex -t json`, which may read only that file, and the JSON AST is checked so that every image
+it names lies in the staged project. A separate Pandoc run converts that AST to DOCX; it never interprets TeX.
+Every attack vector known from the audit is blocked with Pandoc 3.12 and 3.13 (`tools/audit/phase2/r3_attacks.py`),
+and the default build produces the same documents as the former single-pass reader on the validation projects.
 
-* `\input{/path}` inside a `filecontents` body makes Pandoc 3.12 and 3.13 read an arbitrary file into the DOCX;
-* `\iffalse … \ifx … \fi \input{/path} \fi` (conditional nesting) did the same with Pandoc 3.1.3; Pandoc 3.12 and
-  3.13 do not follow it.
+`LATEX2WORD_UNSAFE_LEGACY_READER=1` restores the single unconfined Pandoc run, only to diagnose a project the
+confined reader refuses. It reopens the F-02 file-read class; every such build carries warning `L2W-W-CONFINE-005`.
 
-The structural fix is to give the reader only one flattened file of already validated content and to run it with
-`pandoc --sandbox`. It exists behind `LATEX2WORD_EXPERIMENTAL_CONFINED_READER=1` (see
-`reports/audit/remediation-phase2.md`). Local certification with Pandoc 3.12 and 3.13 found it blocks every known
-vector and produces the same documents as the production path on the validation projects; it stays opt-in until it is made the default in a
-separate, reviewed change.
+## Why untrusted input is still out of scope
 
 ### TeX for figures (audit F-07)
 

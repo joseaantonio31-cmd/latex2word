@@ -13,7 +13,8 @@ project.yaml + profile
 3. figures        TikZ/circuitikz/pgfplots and PDF graphics → SVG (latex + dvisvgm, PDF backends)
 4. rewrite        staged-copy edits with a transformation log (see "Staged rewrites")
 5. probe          report constructs Pandoc would silently drop
-6. Pandoc         LaTeX → DOCX (+ citeproc) with the latex2word Lua filters and a profile-generated reference.docx
+6. Pandoc         confined reader: flattened source → sandboxed LaTeX reader → JSON AST (see "Confined reader");
+                  writer: AST → DOCX (+ citeproc) with the latex2word Lua filters and a profile-generated reference.docx
 7. finalise       one OOXML pass: styles, sections, pagination, front matter, tables, figures, equations, notes
 8. validate       structural and layout checks; atomic replacement of the output
 ```
@@ -36,7 +37,8 @@ project.yaml + profile
      `\null`) and figure/table note blocks, each as a marker environment the filter understands;
    - `bibliography.py`, `metadata/`: bibliography sources and front-matter metadata.
 5. **Probe** (`texprobe.py`): a Pandoc AST pass that finds unknown commands whose text would vanish.
-6. **Pandoc** (`pandoc_adapter.py`, `pandoc_compat.py`, `reference_doc.py`, `filters/*.lua`): the Lua filters
+6. **Pandoc** (`confinement.py`, `pandoc_adapter.py`, `pandoc_compat.py`, `reference_doc.py`, `filters/*.lua`): the
+   confined reader turns the flattened source into a JSON AST (see "Confined reader"); in the writer run the Lua filters
    normalise math, number headings/figures/tables/equations from the profile, resolve labels and references,
    turn the markers into Word constructs (fields, page breaks, sections, styles) and report what they did.
 7. **Finalisation** (`ooxml/`): a single pass over the DOCX package: styles and typography (`styles.py`), sections
@@ -58,13 +60,15 @@ project.yaml + profile
   rewrite (e.g. inside a TikZ picture that becomes an SVG) are not checked.
 * **Output target** (audit F-06): see `output_safety.py`. The DOCX never replaces a build input or a non-DOCX file.
 
-## Experimental confined reader (opt-in)
+## Confined reader
 
-With `LATEX2WORD_EXPERIMENTAL_CONFINED_READER=1`, step 6 runs in two Pandoc processes (`confinement.py`): the staged,
-validated source graph is flattened into one file, read by `pandoc --sandbox -f latex -t json` (a refused read is
-`L2W-E-CONFINE-001`), every image in the JSON AST is checked to resolve inside the staging directory
-(`L2W-E-CONFINE-002`), and the unchanged writer run converts the AST to DOCX. It closes the reader leaks described in
-[SECURITY.md](../SECURITY.md) and is not the default yet.
+Step 6 runs in two Pandoc processes (`confinement.py`, `build._confined_reader_options`): the staged, validated
+source graph is flattened into one file, read by `pandoc --sandbox -f latex -t json` with the profile's Pandoc
+arguments (a refused read is `L2W-E-CONFINE-001`, a source that cannot be flattened `L2W-E-CONFINE-004`), every image
+in the JSON AST is checked to resolve inside the staging directory along the writer's search path, including
+`\graphicspath` (`L2W-E-CONFINE-002`), and the writer run converts the AST to DOCX with the filters, citeproc and the
+reference document. Pandoc's LaTeX reader therefore never sees the project itself ([SECURITY.md](../SECURITY.md)).
+`LATEX2WORD_UNSAFE_LEGACY_READER=1` restores the former single run, for diagnosis only (`L2W-W-CONFINE-005`).
 
 ## Profiles and configuration
 

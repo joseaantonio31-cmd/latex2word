@@ -34,7 +34,7 @@ import re
 import shutil
 import tempfile
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from importlib import resources
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -42,6 +42,7 @@ from typing import Any
 from latex2word import __version__
 from latex2word.bibliography import BibliographyPlan, plan_bibliography
 from latex2word.config import ProjectConfig
+from latex2word.confinement import FlattenError, check_ast_resources, flatten, read_confined, resource_dirs
 from latex2word.diagnostics import Severity
 from latex2word.docx_validate import DocxExpectations, DocxValidation, FigureExpectation, validate_docx
 from latex2word.errors import BuildError
@@ -81,6 +82,9 @@ BUILD_MANIFEST_SCHEMA = "latex2word.build_manifest/1"
 BUILD_DIRNAME = "build"
 FILTER_FILES = ("l2w_semantic.lua", "l2w_math.lua", "l2w_util.lua")
 ENTRY_FILTER = "l2w_semantic.lua"
+# Set to "1" to read the LaTeX with one unconfined Pandoc run (the pre-R3 path). Unsafe: Pandoc's reader can then read
+# files outside the project. Every such build carries warning L2W-W-CONFINE-005.
+UNSAFE_LEGACY_READER_ENV = "LATEX2WORD_UNSAFE_LEGACY_READER"
 
 
 @dataclass
@@ -476,32 +480,24 @@ def run_build(
         resource_paths=[cwd],
         extra_args=profile.data["pandoc"]["extra_args"],
     )
-    if os.environ.get("LATEX2WORD_EXPERIMENTAL_CONFINED_READER") == "1":
-        # EXPERIMENTAL (audit R3): flattened source -> `pandoc --sandbox -f latex -t json` -> resource check ->
-        # the unchanged writer run on the JSON AST. See latex2word.confinement.
-        from dataclasses import replace as _replace
-
-        from latex2word.confinement import FlattenError, check_ast_resources, flatten, read_confined, resource_dirs
-
-        note("EXPERIMENTAL: confined Pandoc reader")
-        try:
-            flat = flatten(staged_graph)
-        except FlattenError as exc:
-            result.findings.append(Finding("L2W-E-CONFINE-004", Severity.ERROR, f"the source cannot be flattened safely: {exc}"))
+    if os.environ.get(UNSAFE_LEGACY_READER_ENV) == "1":
+        # one unconfined Pandoc run reads the LaTeX itself: kept only to diagnose a project the confined reader refuses
+        result.findings.append(Finding(
+            "L2W-W-CONFINE-005", Severity.WARNING,
+            f"{UNSAFE_LEGACY_READER_ENV}=1: Pandoc's LaTeX reader runs unconfined and can read files outside the "
+            "project (trusted input only)",
+        ))
+    else:
+        # the confined reader (audit R3): flattened source -> `pandoc --sandbox -f latex -t json` -> resource check ->
+        # the writer run on the JSON AST. See latex2word.confinement.
+        note("reading the LaTeX source with the confined Pandoc reader")
+        confined_options, refused = _confined_reader_options(
+            options, staged_graph, tool, build_dir, cwd, staging, profile, config, runner, result.findings,
+        )
+        if refused:
             return _finish(result, config, profile, tool, workspace, figures_run, figure_plan, bib_plan, None, None,
                            None, output, keep_workspace, records=records, changes=changes)
-        confined = read_confined(tool.path, flat, staged_graph, build_dir, timeout_s=config.tools.timeout_s, runner=runner)
-        result.findings.extend(confined.findings)
-        # \graphicspath lives only in the reader's state: the writer run gets the same search path explicitly
-        search = resource_dirs(staged_graph, cwd)
-        if confined.ast is not None:
-            result.findings.extend(check_ast_resources(confined.ast, cwd, staging, search))
-        if confined.ast is None or any(f.code.startswith("L2W-E-CONFINE") for f in result.findings):
-            return _finish(result, config, profile, tool, workspace, figures_run, figure_plan, bib_plan, None, None,
-                           None, output, keep_workspace, records=records, changes=changes)
-        ast_path = build_dir / "confined_ast.json"
-        _write_json(ast_path, confined.ast)
-        options = _replace(options, inputs=[str(ast_path)], from_format="json", resource_paths=search)
+        options = confined_options
     pandoc_run: PandocRun = run_pandoc(tool, options, cwd=cwd, timeout_s=config.tools.timeout_s, runner=runner)
     _write_json(build_dir / "pandoc_run.json", pandoc_run.to_dict())
     missing_keys = {key for key in bib_plan.cited_keys if key not in bib_plan.defined}
@@ -607,6 +603,33 @@ def run_build(
                    validation=validation, reference=reference, extraction=extraction, metadata=metadata,
                    finalization=finalization, final_validation=checks.get("semantic"),
                    layout_validation=checks.get("layout"), preliminary_path=preliminary)
+
+
+def _confined_reader_options(
+    options: PandocOptions, staged_graph: Any, tool: PandocTool, build_dir: Path, cwd: Path, staging: Path,
+    profile: Profile, config: ProjectConfig, runner: Runner, findings: list[Finding],
+) -> tuple[PandocOptions, bool]:
+    """Read the staged source with the confined reader; return the writer options and whether the build must stop.
+
+    The writer run then converts the JSON AST: it gets the reader's image search path (``\\graphicspath`` lives only in
+    the reader's state) and keeps every other option (filters, citeproc, CSL, reference document, profile arguments).
+    """
+    try:
+        flat = flatten(staged_graph)
+    except FlattenError as exc:
+        findings.append(Finding("L2W-E-CONFINE-004", Severity.ERROR, f"the source cannot be flattened safely: {exc}"))
+        return options, True
+    confined = read_confined(tool.path, flat, staged_graph, build_dir, timeout_s=config.tools.timeout_s, runner=runner,
+                             extra_args=profile.data["pandoc"]["extra_args"])
+    findings.extend(confined.findings)
+    search = resource_dirs(staged_graph, cwd)
+    if confined.ast is not None:
+        findings.extend(check_ast_resources(confined.ast, cwd, staging, search))
+    if confined.ast is None or any(f.code.startswith("L2W-E-CONFINE") for f in findings):
+        return options, True
+    ast_path = build_dir / "confined_ast.json"
+    _write_json(ast_path, confined.ast)
+    return replace(options, inputs=[str(ast_path)], from_format="json", resource_paths=search), False
 
 
 def _reference_markers(graph: Any, content_edits: list[Any]) -> tuple[list[Any], list[ReferenceOccurrence]]:

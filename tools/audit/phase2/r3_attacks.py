@@ -1,14 +1,19 @@
-"""F-02 attack vectors against the production path and the experimental confined reader (audit R3).
+"""F-02 attack vectors against the default build (confined reader, audit R3) and the unsafe legacy reader.
 
 Usage (from the repository root, any OS):
-    python tools/audit/phase2/r3_attacks.py <empty-scratch-dir> [--pandoc PATH]
+    python tools/audit/phase2/r3_attacks.py <empty-scratch-dir> [--pandoc PATH] [--harness]
 
 Self-contained: creates its own canary files outside every attack project. For each vector it records
 * control   -- does the UNCONFINED Pandoc reader read the canary? (proves the attack is live with this Pandoc;
                "n/a" for vectors that latex2word's scanner stops and Pandoc does not read by itself);
-* the production build and the experimental build (harness: Pandoc gate and schema-order check bypassed,
-  see tools/audit/harness_build.py): blocking errors, canary in the confined JSON AST / preliminary / final DOCX;
+* the default build: ``python -m latex2word build --json`` with no reader variable set, exactly as a user runs it;
+* the legacy build (``LATEX2WORD_UNSAFE_LEGACY_READER=1``, the pre-R3 single-pass reader): the regression baseline;
+  for each: blocking errors, canary in the confined JSON AST / preliminary / final DOCX;
 * the confined reader alone (no deny-list in front).
+
+``--harness`` runs the builds through tools/audit/harness_build.py instead (Pandoc gate and schema-order check
+bypassed): only for a Pandoc the build refuses, such as 3.1.3 in the audit container. Exit code 1 if the default
+build or the confined reader leaks.
 
 Paths inside TeX use forward slashes (Path.as_posix): a native Windows path such as C:\\Users\\... would be parsed
 as TeX commands and make every attack fail for the wrong reason.
@@ -30,6 +35,7 @@ CANARY = "TOPSECRETCANARY42"
 def main(argv: list[str]) -> int:
     scratch = Path(argv[0]).resolve()
     pandoc = argv[argv.index("--pandoc") + 1] if "--pandoc" in argv else shutil.which("pandoc")
+    harness = "--harness" in argv
     if pandoc is None:
         print("pandoc not found", file=sys.stderr)
         return 2
@@ -86,7 +92,7 @@ def main(argv: list[str]) -> int:
                                  capture_output=True, text=True, encoding="utf-8", errors="replace")
         live = CANARY in control.stdout or (name.endswith("graphic") and "private.png" in control.stdout)
         results = {}
-        for mode in ("production", "experimental"):
+        for mode in ("default", "legacy"):
             ws, out = scratch / f"{name}-{mode}-ws", scratch / f"{name}-{mode}-out"
             for d in (ws, out):
                 shutil.rmtree(d, ignore_errors=True)
@@ -94,12 +100,16 @@ def main(argv: list[str]) -> int:
             config.write_text(json.dumps({"schema_version": 1, "project": {"name": "v", "root": str(project), "main": "main.tex"},
                                           "profile": "generic", "workspace": {"root": str(ws)}, "output": {"directory": str(out)}}),
                               encoding="utf-8")  # JSON is valid YAML: no quoting issues with Windows paths
-            env = dict(os.environ)
-            env.pop("LATEX2WORD_EXPERIMENTAL_CONFINED_READER", None)
-            if mode == "experimental":
-                env["LATEX2WORD_EXPERIMENTAL_CONFINED_READER"] = "1"
-            run = subprocess.run([sys.executable, str(repo / "tools" / "audit" / "harness_build.py"), str(config)],
-                                 capture_output=True, text=True, encoding="utf-8", errors="replace", env=env, cwd=repo)
+            env = {k: v for k, v in os.environ.items()
+                   if k not in ("LATEX2WORD_EXPERIMENTAL_CONFINED_READER", "LATEX2WORD_UNSAFE_LEGACY_READER")}
+            if mode == "legacy":
+                env["LATEX2WORD_UNSAFE_LEGACY_READER"] = "1"
+            if harness:
+                command = [sys.executable, str(repo / "tools" / "audit" / "harness_build.py"), str(config)]
+            else:
+                command = [sys.executable, "-m", "latex2word", "build", str(config), "--json"]
+            run = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", errors="replace", env=env,
+                                 cwd=repo)
             try:
                 res = json.loads(run.stdout)
             except ValueError:
@@ -122,18 +132,20 @@ def main(argv: list[str]) -> int:
             alone = f"{'LEAK' if leaked else 'clean'} {','.join(codes) or '-'}"
         except FlattenError as exc:
             alone = f"flatten refused: {exc}"
-        rows.append((name, "live" if live else "n/a", *results["production"], *results["experimental"], alone))
+        rows.append((name, "live" if live else "n/a", *results["default"], *results["legacy"], alone))
 
-    header = ("attack", "control (unconfined reader)", "prod status", "prod errors", "prod AST", "prod preliminary",
-              "prod final", "exp status", "exp errors", "exp AST", "exp preliminary", "exp final", "confined reader alone")
+    header = ("attack", "control (unconfined reader)", "default status", "default errors", "default AST",
+              "default preliminary", "default final", "legacy status", "legacy errors", "legacy AST",
+              "legacy preliminary", "legacy final", "confined reader alone")
     print("| " + " | ".join(header) + " |")
     print("|" + "---|" * len(header))
     for row in rows:
         print("| " + " | ".join(row) + " |")
-    leaks = [r[0] for r in rows if "LEAK" in r[4:7] + r[9:12] or r[-1].startswith("LEAK")]
-    print(f"\nexperimental-path leaks: {[r[0] for r in rows if 'LEAK' in r[9:12] or r[-1].startswith('LEAK')]}")
-    print(f"production-path leaks: {[r[0] for r in rows if 'LEAK' in r[4:7]]}")
-    return 1 if any("LEAK" in r[9:12] or r[-1].startswith("LEAK") for r in rows) else 0
+    default_leaks = [r[0] for r in rows if "LEAK" in r[4:7] or r[-1].startswith("LEAK")]
+    print(f"\nbuild runner: {'harness (gate bypassed)' if harness else 'python -m latex2word build --json'}")
+    print(f"default-path leaks (must be empty): {default_leaks}")
+    print(f"legacy-reader leaks (regression baseline): {[r[0] for r in rows if 'LEAK' in r[9:12]]}")
+    return 1 if default_leaks else 0
 
 
 if __name__ == "__main__":

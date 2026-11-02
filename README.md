@@ -12,7 +12,8 @@ figures, references and document structure.
 > owner until a licence is added. Output must be reviewed in Microsoft Word.
 
 > **Trust boundary.** latex2word currently assumes trusted LaTeX input. Do not use it to process untrusted or
-> third-party LaTeX projects. See [SECURITY.md](SECURITY.md) for what is and is not enforced.
+> third-party LaTeX projects. Pandoc's LaTeX reader is confined to the validated project, but TeX, which renders
+> TikZ/pgfplots figures, is not isolated yet. See [SECURITY.md](SECURITY.md) for what is and is not enforced.
 
 ## Why
 
@@ -61,9 +62,10 @@ and tested; they cannot prove that every possible TeX construct is converted.
 - **Figure and table notes**: note blocks attached to floats keep their source formatting as a Word style.
 - **Profiles**: page geometry, columns, typography and numbering live in YAML profiles (`generic`,
   `ieee-conference`, or your own), never in the engine.
-- **Safety (trusted input)**: the LaTeX project is never modified; all work happens in an owned, staged copy; the
-  output can never replace a build input or a non-DOCX file; it is replaced atomically only after validation. These
-  are safety properties for trusted projects, not a sandbox (see [SECURITY.md](SECURITY.md)).
+- **Safety (trusted input)**: the LaTeX project is never modified; all work happens in an owned, staged copy;
+  Pandoc reads the LaTeX only through a sandboxed, flattened copy of the validated project; the output can never
+  replace a build input or a non-DOCX file; it is replaced atomically only after validation. These are safety
+  properties for trusted projects, not a sandbox for hostile ones (see [SECURITY.md](SECURITY.md)).
 
 ## Requirements
 
@@ -134,9 +136,8 @@ a `visual_review.md` checklist for the Word review.
 - Very wide equations can render differently because Word's math metrics differ from TeX's.
 - Not every macro or package can be reproduced semantically; unknown constructs that would lose text are errors.
 - Microsoft Word is the authoritative renderer; final layout must be reviewed there.
-- latex2word assumes trusted LaTeX input: Pandoc's reader can still be steered outside the project by a
-  `filecontents` construct (an opt-in confined reader closes this), and TeX can read any readable file while
-  rendering a figure. See [SECURITY.md](SECURITY.md).
+- latex2word assumes trusted LaTeX input: Pandoc's reader is confined by default, but TeX can read any readable
+  file while rendering a figure. See [SECURITY.md](SECURITY.md).
 
 See [docs/known-limitations.md](docs/known-limitations.md).
 
