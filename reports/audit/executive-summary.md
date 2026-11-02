@@ -1,6 +1,6 @@
 # Executive summary
 
-**Verdict: not release-ready for untrusted input or unattended thesis conversion; the architecture is sound and
+**Verdict: not release-ready; untrusted input is unsupported (2 known file-read leaks remain); the architecture is sound and
 loud-by-default, but this audit found and fixed two P0 defects that the existing suite did not catch, and the
 certified toolchain could not be exercised here.**
 
@@ -13,7 +13,7 @@ depends on Pandoc 3.12, TeX or Word is BLOCKED or NOT TESTED, not passed.
 | ID | P | One line | Status |
 |---|---|---|---|
 | F-01 | P0 | `\\ [x,y]` at the start of an `align`/`aligned` row silently deleted `[x,y]` from the equation, even in numbered equations | fixed, regression-tested |
-| F-02 | P0 | untrusted LaTeX could make Pandoc read files outside the project into the DOCX (`\input{\macro}`, `\let` aliases, `\includegraphics{\macro}`, `\lstinputlisting`, `\inputminted`) | fixed (deny-list; residual risk documented) |
+| F-02 | P0 | untrusted LaTeX could make Pandoc read files outside the project into the DOCX (`\input{\macro}`, `\let` aliases, `\includegraphics{\macro}`, local `.sty` macros, `\includesvg`, `\lstinputlisting`, `\inputminted`, `\usepackage{\macro}`) | **partially fixed**: 10 vectors closed, 2 scanner/reader mismatches (`\iffalse` nesting, `filecontents`) still leak |
 | F-05 | P1 | `build` never applied the Pandoc compatibility verdict `doctor` computes; with Pandoc 3.1.3, numbered equations lost their numbers silently | fixed |
 | F-04 | P1 | a reference the reader drops (`\Cref` on 3.1.3) vanished without a diagnostic | detection added (`L2W-E-REF-012`) |
 | F-03 | P2 | `\label{a_{1}}` with nested braces left TeX inside the equation | fixed |
@@ -50,12 +50,22 @@ Details, reproductions and root causes: `findings.md`. Security: `security.md`.
 | baseline `35547d4` | 1012 passed, 92 failed, 18 errors |
 | after F-01..F-04 | identical failure set + 33 new passing tests |
 | after F-05 | 986 passed, 141 failed, 30 errors: all 73 newly failing tests stop at the new gate refusing Pandoc 3.1.3 (attributed by JUnit XML) |
+| after review follow-up | 997 passed, failure set identical to the F-05 run |
 
 New regression tests fail on the unfixed code (`logs/regressions-before-fix.log`) and pass after.
 
 ## Independent adversarial review
 
-_Pending — filled in from the separate reviewer's report._
+A separate agent with its own context reviewed the fix commits read-only and executed attacks against them. Verdicts:
+F-01 partially fixed, F-02 **not fixed** against the threat model (5 working leaks), F-03 confirmed, F-04 partially
+fixed with a false positive, F-05 partially fixed. I re-executed its key claims before acting. All were reproduced.
+
+Follow-up fixes closed 3 of the 5 leaks (local `.sty`, `\includesvg`, macro `\usepackage`), the F-01 gaps, the F-04
+false positive, and two new false errors on valid documents. They also made the Pandoc probe check the facts that
+matter. 11 new regression tests fail before and pass after. The two remaining leaks are scanner/reader disagreements
+(`\iffalse` nesting, `filecontents`), which a deny-list cannot close. **Untrusted LaTeX input is therefore not
+supported** until roadmap R3 (single flattened file + `pandoc --sandbox`) is done. Limitation: the reviewer is the
+same model family with a fresh context, not a human or a different tool.
 
 ## Prioritised remediation roadmap
 
@@ -63,11 +73,11 @@ _Pending — filled in from the separate reviewer's report._
 |---|---|---|---|
 | R1 | Run the full suite and `test_audit_e2e.py` on Pandoc 3.12 + TeX; run the integration suite on the original thesis | release gate, F-10 | low (needs the toolchain) |
 | R2 | Confine `--output` and the default output directory outside the project | F-06 | low |
-| R3 | Flatten the staged sources into one file and run Pandoc with `--sandbox` (structural fix for the F-02 class) | F-02 residual | medium |
+| R3 | Flatten the staged sources into one file and run Pandoc with `--sandbox` (structural fix for the F-02 class; required before accepting untrusted input) | F-02 residual (`\iffalse`, `filecontents`) | medium |
 | R4 | Restrict TeX reads (`openin_any=p`) for figure rendering after checking staged data paths | F-07 | low–medium |
 | R5 | Support one number per row in `align`/`gather` (multiple numbered rows) | F-12 | medium |
 | R6 | Normalise property-child order in the finaliser instead of failing on Pandoc-originated order | F-08 | low |
 | R7 | Ship or require a CSL matching biblatex `style=`; warn on mismatch | F-11 | low |
-| R8 | Per-occurrence reference invariant (not per label); equation-count invariant source ↔ report | F-04 limit | low |
+| R8 | Per-occurrence reference invariant (not per label); equation-count invariant source ↔ report; report probe timeouts as a tool error, not UNSUPPORTED | F-04, F-05 limits | low |
 | R9 | Property-based tests for `l2w_math.lua` (random rows/cells → linearised OMML) | F-01 class | low |
 | R10 | Make the 3 platform tests portable | F-09 | trivial |

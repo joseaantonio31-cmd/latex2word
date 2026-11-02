@@ -30,6 +30,51 @@ class LabelReference:
     label: str
     command: str
     location: SourceLocation
+    in_definition: bool = False  # inside a macro/environment definition body: text only until the macro is used
+
+
+_DEFINITION_COMMANDS = frozenset(
+    {"newcommand", "renewcommand", "providecommand", "DeclareRobustCommand", "newenvironment", "renewenvironment",
+     "def", "gdef", "edef", "xdef"}
+)
+
+
+def _definition_spans(masked: str) -> list[tuple[int, int]]:
+    """Offsets ``(start, end)`` of macro/environment definitions (head and body groups)."""
+    spans: list[tuple[int, int]] = []
+    for command in iter_commands(masked):
+        if command.name not in _DEFINITION_COMMANDS:
+            continue
+        pos = skip_ws(masked, command.end)
+        if command.name.endswith("def"):  # \def\name<parameter text>{body}
+            brace = masked.find("{", pos)
+            group = read_group(masked, brace) if brace >= 0 else None
+            if group is not None:
+                spans.append((command.start, group[2]))
+            continue
+        end = None
+        groups = 0
+        while pos < len(masked) and groups < (3 if "environment" in command.name else 2):
+            if masked[pos] == "[":
+                optional = read_optional(masked, pos)
+                if optional is None:
+                    break
+                pos = skip_ws(masked, optional[2])
+                continue
+            if masked[pos] == "\\" and groups == 0:  # \newcommand\name without braces
+                name_end = pos + 1
+                while name_end < len(masked) and masked[name_end].isalpha():
+                    name_end += 1
+                pos, groups = skip_ws(masked, name_end), 1
+                continue
+            group = read_group(masked, pos)
+            if group is None:
+                break
+            end, groups = group[2], groups + 1
+            pos = skip_ws(masked, group[2])
+        if end is not None:
+            spans.append((command.start, end))
+    return spans
 
 
 @dataclass(frozen=True)
@@ -53,6 +98,7 @@ def scan_labels(graph: SourceGraph) -> LabelScan:
         if scanned is None:
             continue
         masked = scanned.masked
+        spans = _definition_spans(masked)
         for command in iter_commands(masked):
             name = command.name
             if name != "label" and name not in REFERENCE_COMMANDS:
@@ -71,7 +117,8 @@ def scan_labels(graph: SourceGraph) -> LabelScan:
             if name == "label":
                 definitions.append(LabelDefinition(content, where))
             else:
-                references.extend(LabelReference(label, name, where) for label in split_top_level(content))
+                inside = any(a < command.start < b for a, b in spans)
+                references.extend(LabelReference(label, name, where, inside) for label in split_top_level(content))
     return LabelScan(tuple(definitions), tuple(references))
 
 

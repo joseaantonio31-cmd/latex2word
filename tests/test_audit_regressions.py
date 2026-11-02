@@ -278,3 +278,99 @@ def test_f05_build_applies_the_pandoc_classification_that_doctor_reports(
         with pytest.raises(RuntimeError, match="past gate"):
             build_module.run_build(config)
     assert seen["probe"] is True and seen["path"] == "/fake/pandoc" and seen["version"] == "3.1.3"
+
+
+# ---------------------------------------------------------------- follow-ups from the independent review
+
+
+@requires_pandoc
+def test_f01b_eqnarray_spacing_then_bracket_row_keeps_the_content(tmp_path: Path):
+    # kernel rows are split twice; after the first split "[x]" is content and must not be eaten the second time
+    [result] = _lua_analyze(tmp_path, ["\\begin{eqnarray*} a &=& b \\\\[2pt] [x] &=& y \\end{eqnarray*}"])
+    assert "[x]" in result["tex"] and "2pt" not in result["tex"]
+
+
+@requires_pandoc
+def test_f01b_alignat_keeps_its_column_count_and_its_first_cell(tmp_path: Path):
+    [result] = _lua_analyze(tmp_path, ["\\begin{alignat}{2} {a} &= b \\label{q} \\end{alignat}"])
+    assert "{a}" in result["tex"] and result["labels"] == ["q"]
+
+
+@requires_pandoc
+def test_f01b_no_guard_where_texmath_keeps_the_bracket(tmp_path: Path):
+    # a guard is an extra (zero-width) run in Word: only rows after the first, inside a rebuilt array, need one
+    first_row, gather = _lua_analyze(
+        tmp_path, ["\\begin{align*} [x] &= y \\end{align*}", "\\begin{gather*} [x] \\\\ a \\\\ [y] \\end{gather*}"]
+    )
+    assert "{}" not in first_row["tex"] and "{}" not in gather["tex"]
+
+
+@pytest.mark.parametrize(
+    ("name", "files", "code"),
+    [
+        ("local-sty-input", {"main.tex": "\\documentclass{article}\n\\usepackage{mine}\n\\begin{document}\\leak{}\\end{document}\n",
+                             "mine.sty": "\\newcommand\\leak{\\input{@S@}}\n"}, "outside-root"),
+        ("local-sty-let-alias", {"main.tex": "\\documentclass{article}\n\\usepackage{mine}\n\\begin{document}x\\end{document}\n",
+                                 "mine.sty": "\\let\\inp\\input\n"}, "unsupported-syntax"),
+        ("macro-package-name", {"main.tex": "\\documentclass{article}\n\\def\\x{@S@}\\usepackage{\\x}\n\\begin{document}x\\end{document}\n"},
+         "dynamic-path"),
+        ("includesvg", {"main.tex": "\\documentclass{article}\n\\begin{document}\\includesvg{@S@}\\end{document}\n"},
+         "unsupported-command"),
+    ],
+)
+def test_f02b_review_bypasses_are_errors(tmp_path: Path, name: str, files: dict, code: str):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret.tex").write_text("SECRET\n", encoding="utf-8")
+    secret = (outside / "secret").as_posix()
+    root = make_project(tmp_path, {k: v.replace("@S@", secret) for k, v in files.items()})
+    graph = build_source_graph(root, root / "main.tex")
+    assert any(f.code == code and f.severity is Severity.ERROR for f in graph.findings), [
+        (f.code, f.severity, f.message) for f in graph.findings
+    ]
+
+
+@pytest.mark.parametrize(
+    "preamble",
+    [
+        "\\makeatletter\\def\\input@path{{chapters/}}\\makeatother",
+        "\\renewcommand{\\includegraphics}[2][]{\\fbox{#2}}",
+    ],
+)
+def test_f02b_internal_names_and_redefinition_targets_are_not_errors(tmp_path: Path, preamble: str):
+    root = make_project(tmp_path, {"main.tex": f"\\documentclass{{article}}\n{preamble}\n\\begin{{document}}x\\end{{document}}\n"})
+    graph = build_source_graph(root, root / "main.tex")
+    assert not graph.has_errors, [(f.code, f.message) for f in graph.findings]
+
+
+def test_f04b_reference_inside_an_unused_macro_body_is_not_reported(tmp_path: Path):
+    from latex2word.labels import scan_labels
+
+    root = make_project(
+        tmp_path,
+        {"main.tex": "\\documentclass{article}\n\\newcommand\\seeone{see Section~\\ref{sec:a}}\n"
+                     "\\begin{document}\n\\section{One}\\label{sec:a}\nText \\ref{sec:b}.\n\\end{document}\n"},
+    )
+    scan = scan_labels(build_source_graph(root, root / "main.tex"))
+    assert [(r.label, r.in_definition) for r in scan.references] == [("sec:a", True), ("sec:b", False)]
+    assert [f.message for f in _lost_references(scan, {"refs": []})] == [
+        "\\ref{sec:b} never reached the document: the Pandoc reader dropped it"
+    ]
+
+
+def test_f05b_probe_rejects_a_reader_that_strips_equation_wrappers_or_drops_cref():
+    from latex2word.pandoc_compat import _ast_failures
+
+    def ast(math: str, with_cref: bool) -> dict:
+        links = [{"t": "Link", "c": [["", [], [["reference-type", "ref"], ["reference", "sec:probe"]]], [], ["#sec:probe", ""]]}]
+        if with_cref:
+            links.append({"t": "Link", "c": [["", [], [["reference-type", "ref+Label"], ["reference", "sec:probe"]]], [], ["#sec:probe", ""]]})
+        return {"blocks": [{"t": "Para", "c": [{"t": "Math", "c": [{"t": "DisplayMath"}, math]}, *links]}]}
+
+    certified = _ast_failures(ast("\\begin{equation}\nx = 1 \\label{eq:probe}\n\\end{equation}", True))
+    stripped = _ast_failures(ast("x = 1 \\label{eq:probe}", True))
+    no_cref = _ast_failures(ast("\\begin{equation}\nx = 1 \\label{eq:probe}\n\\end{equation}", False))
+    assert "equation environment kept inside the math string" not in certified
+    assert "\\Cref as a link of reference type ref+Label" not in certified
+    assert "equation environment kept inside the math string" in stripped
+    assert "\\Cref as a link of reference type ref+Label" in no_cref

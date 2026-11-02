@@ -105,7 +105,7 @@ _PROBE_TEX = r"""\documentclass{article}
 \usepackage{amsmath,graphicx}
 \begin{document}
 \section{Intro}\label{sec:probe}
-See Section~\ref{sec:probe} and \cite{k1}.
+See Section~\ref{sec:probe} and \cite{k1}. \Cref{sec:probe} too.
 \begin{figure}\includegraphics[width=0.5\linewidth]{x.png}\caption{Cap}\label{fig:probe}\end{figure}
 \begin{equation}
 x = 1 \label{eq:probe}
@@ -157,6 +157,14 @@ def _ast_failures(ast: Any) -> list[str]:
     math = first("Math")
     if not (math and "\\label{eq:probe}" in math["c"][1]):
         failures.append("equation label kept inside the math string")
+    # the filter detects numbered equations by this wrapper (Pandoc 3.1.3 strips it: numbers lost silently)
+    if not (math and math["c"][1].lstrip().startswith("\\begin{equation}")):
+        failures.append("equation environment kept inside the math string")
+    # Pandoc 3.1.3 drops \Cref together with its argument
+    if not any(
+        e["t"] == "Link" and _attr_dict(e["c"][0]).get("reference-type") == "ref+Label" for e in elements
+    ):
+        failures.append("\\Cref as a link of reference type ref+Label")
     link = first("Link")
     if not (link and _attr_dict(link["c"][0]).get("reference") == "sec:probe" and link["c"][2][0] == "#sec:probe"):
         failures.append("\\ref as a link with reference attributes")
