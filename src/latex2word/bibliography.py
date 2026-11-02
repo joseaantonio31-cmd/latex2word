@@ -316,6 +316,7 @@ def _plan_citeproc(
             Finding("L2W-I-BIB-007", Severity.INFO, "no CSL style configured; Pandoc's default citation style is used")
         )
     plan.csl = csl
+    plan.findings.extend(style_mismatch_findings(graph, csl if csl is not None and csl.is_file() else None))
     # The staged copy lists the files explicitly: drop the source's own commands (one authority).
     seen: set[tuple[str, int]] = set()
     for edge in graph.edges:
@@ -403,3 +404,113 @@ def _check_keys(plan: BibliographyPlan) -> None:
             )
     elif plan.mode == "manual":
         plan.expected_entries = len(plan.inline_keys)
+
+
+# ------------------------------------------------------------------ declared style vs CSL (audit F-11)
+
+# Explicit aliases only: a source style matches a CSL file when one of its aliases equals a token of the CSL's
+# <id> (last path segment), its file stem, or its <title-short>. No fuzzy matching: an unlisted style is
+# reported as "cannot be verified" rather than assumed equivalent.
+STYLE_ALIASES: dict[str, tuple[str, ...]] = {
+    "apa": ("apa",),
+    "ieee": ("ieee",), "ieeetr": ("ieee",), "ieeetran": ("ieee",),
+    "chicago-authordate": ("chicago-author-date",), "chicago-notes": ("chicago-note-bibliography", "chicago-fullnote-bibliography"),
+    "mla": ("modern-language-association", "mla"),
+    "nature": ("nature",),
+    "vancouver": ("vancouver",),
+    "acm": ("association-for-computing-machinery", "acm-sig-proceedings"),
+}
+PANDOC_DEFAULT_CSL = "chicago-author-date"
+
+
+@dataclass(frozen=True)
+class DeclaredStyle:
+    name: str
+    origin: str  # "biblatex style=", "biblatex bibstyle=", "\\bibliographystyle"
+    location: SourceLocation
+
+
+def declared_styles(graph: SourceGraph) -> list[DeclaredStyle]:
+    """Bibliography styles the source asks for (biblatex options, \\bibliographystyle)."""
+    found: list[DeclaredStyle] = []
+    for rel in graph.tex_order:
+        scanned = graph.files.get(rel)
+        if scanned is None:
+            continue
+        masked = scanned.masked
+        for command in iter_commands(masked):
+            where = SourceLocation(rel, scanned.lines.line(command.start))
+            pos = skip_ws(masked, command.end)
+            if command.name in ("usepackage", "RequirePackage"):
+                options = ""
+                if masked[pos : pos + 1] == "[":
+                    group = read_optional(masked, pos)
+                    if group is None:
+                        continue
+                    options, pos = masked[group[0] : group[1]], skip_ws(masked, group[2])
+                names = read_group(masked, pos)
+                if names is None or "biblatex" not in split_top_level(masked[names[0] : names[1]]):
+                    continue
+                for item in split_top_level(options):
+                    key, _, value = item.partition("=")
+                    if key.strip() in ("style", "bibstyle") and value.strip():
+                        found.append(DeclaredStyle(value.strip().strip("{}"), f"biblatex {key.strip()}=", where))
+            elif command.name == "bibliographystyle":
+                group = read_group(masked, pos)
+                if group is not None and masked[group[0] : group[1]].strip():
+                    found.append(DeclaredStyle(masked[group[0] : group[1]].strip(), "\\bibliographystyle", where))
+    return found
+
+
+def csl_identity(csl: Path) -> set[str]:
+    """Tokens that identify a CSL style: its file stem, the last segment of <id>, and <title-short>."""
+    from lxml import etree
+
+    tokens = {csl.stem.lower()}
+    try:
+        root = etree.fromstring(csl.read_bytes(), etree.XMLParser(resolve_entities=False, no_network=True, load_dtd=False))
+    except (OSError, etree.XMLSyntaxError):
+        return tokens
+    for element in root.iter("{http://purl.org/net/xbiblio/csl}id", "{http://purl.org/net/xbiblio/csl}title-short"):
+        text = (element.text or "").strip().lower()
+        if text:
+            tokens.add(text.rstrip("/").rsplit("/", 1)[-1])
+    return tokens
+
+
+def style_mismatch_findings(graph: SourceGraph, csl: Path | None) -> list[Finding]:
+    """Never imply that the CSL in use reproduces the bibliography style the source declares."""
+    findings: list[Finding] = []
+    for style in declared_styles(graph):
+        aliases = STYLE_ALIASES.get(style.name.lower())
+        if csl is None:
+            if aliases and PANDOC_DEFAULT_CSL in aliases:
+                continue
+            findings.append(Finding(
+                "L2W-W-BIB-014", Severity.WARNING,
+                f"the source asks for bibliography style {style.name!r} ({style.origin}) but no CSL file is configured: "
+                f"Pandoc's default style ({PANDOC_DEFAULT_CSL}) is used, so references and citations will not follow "
+                f"{style.name!r}; set bibliography.csl to a matching CSL file",
+                style.location,
+            ))
+            continue
+        identity = csl_identity(csl)
+        if aliases and identity & set(aliases):
+            findings.append(Finding("L2W-I-BIB-015", Severity.INFO,
+                                    f"CSL {csl.name} matches the declared style {style.name!r}", style.location))
+        elif aliases:
+            findings.append(Finding(
+                "L2W-W-BIB-015", Severity.WARNING,
+                f"the source asks for bibliography style {style.name!r} ({style.origin}) but the configured CSL {csl.name} "
+                f"({', '.join(sorted(identity))}) is not that style",
+                style.location,
+            ))
+        else:
+            findings.append(Finding(
+                "L2W-W-BIB-016", Severity.WARNING,
+                f"the bibliography style {style.name!r} ({style.origin}) has no known CSL equivalent: latex2word cannot "
+                f"verify that the configured CSL {csl.name} reproduces it",
+                style.location,
+            ))
+    return findings
+

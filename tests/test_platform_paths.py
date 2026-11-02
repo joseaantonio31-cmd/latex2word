@@ -8,6 +8,7 @@ and injected ``which`` tests simulate the other platform's semantics and never c
 from __future__ import annotations
 
 import ast
+import ntpath
 import os
 import sys
 from pathlib import Path, PurePosixPath, PureWindowsPath
@@ -149,7 +150,10 @@ def test_distinct_files_whose_names_differ_only_in_case_are_refused(
     monkeypatch: pytest.MonkeyPatch, project: Path, workspace: Workspace
 ):
     # Simulates a case-sensitive source tree holding two real files; the machine's own FS may be
-    # case-insensitive, so the "different files" verdict is injected.
+    # case-insensitive, so the "different files" verdict is injected. On a case-sensitive FS the second spelling is
+    # a file of its own and must exist (audit F-09: the test used to assume a case-insensitive host).
+    if _filesystem_is_case_sensitive(project):
+        (project / "chap.tex").write_bytes(b"other")
     monkeypatch.setattr(os.path, "samefile", lambda a, b: False)
     with pytest.raises(StagingError, match="letter case"):
         stage_files(project, [("Chap.tex", "include"), ("chap.tex", "include")], workspace)
@@ -275,7 +279,9 @@ def test_lookup_asks_for_bare_names_and_executes_exactly_what_which_returned(pat
     report = inspect_toolchain(which=which, runner=recorder, platform="linux")
     assert asked and not [n for n in asked if os.path.splitext(n)[1] or "/" in n or "\\" in n]
     executed = {argv[0] for argv in recorder.argv}
-    assert executed and all(argv0 == path_for(os.path.basename(argv0).split(".")[0]) for argv0 in executed
+    # ntpath.basename splits on both "\\" and "/", so Windows paths are taken apart with Windows semantics on any
+    # host (audit F-09: os.path.basename on POSIX does not split C:\\...\\pandoc.exe)
+    assert executed and all(argv0 == path_for(ntpath.basename(argv0).split(".")[0]) for argv0 in executed
                             if argv0 != sys.executable)
     assert report.diagnostics
 
