@@ -1,12 +1,31 @@
 # Executive summary
 
-**Verdict: not release-ready; untrusted input is unsupported (2 known file-read leaks remain); the architecture is sound and
-loud-by-default, but this audit found and fixed two P0 defects that the existing suite did not catch, and the
-certified toolchain could not be exercised here.**
+**Verdict after phase 2: CLOUD REMEDIATION PARTIAL — ARCHITECTURAL WORK REMAINS.** Not release-ready.
+Everything implementable without Pandoc 3.12/3.13, TeX and Word was fixed and tested. The two remaining Pandoc-reader
+leaks are closed only by an experimental confined-reader path that needs local certification. TeX isolation for
+TikZ (F-07) is designed but not implemented. latex2word is documented as requiring trusted LaTeX input.
 
-Scope: repository `latex2word` at `35547d4` (audit start). Fixes on branch `claude/eager-archimedes-0ka8gx`
-(`2d37916`, `a61debb`). Environment: Pandoc 3.1.3, no TeX, no Microsoft Word, so every claim below that
-depends on Pandoc 3.12, TeX or Word is BLOCKED or NOT TESTED, not passed.
+## Phase 2 (structural hardening), in short
+
+| Issue | Status | Evidence | Needs local Windows/TeX/Word validation? |
+|---|---|---|---|
+| F-06 output overwrite | fixed: canonical comparison with every input, refused before conversion | `test_output_safety.py` (19); reproduced overwrite before | yes: real configuration, Windows paths/junctions |
+| F-04 reference loss | fixed per occurrence (staged markers through the filter) | `test_reference_occurrences.py` (11); harness before/after | yes: Pandoc 3.12/3.13, thesis must stay free of `REF-012` |
+| F-05 probe semantics | fixed: `PROBE_ERROR`/`L2W-E-PANDOC-004`; API pin `(1,23)` | `test_probe_semantics.py` (21) | yes: probe on 3.12 (SUPPORTED) and 3.13 |
+| F-02 reader leaks | production: 2 open; experimental confined reader closes all 14 vectors | `test_confinement_prototype.py` (9), `logs/phase2/r3-*.md` | yes: sandbox semantics on 3.12/3.13 |
+| R3 integration | NEEDS_LOCAL_CERTIFICATION | 5 comparable fixtures byte-identical in both modes | yes |
+| F-07 TeX reads | open; boundary and design in `SECURITY.md` | static | yes (TeX) |
+| F-11 CSL mismatch | fixed as detection (warnings) | `test_bibliography_style.py` (12) | yes: real thesis style/CSL |
+| F-09 portability | fixed (tests) | `test_platform_paths.py` | yes: run on Windows |
+| R9 math matrix | 584 cases pass; 277 fail on the pre-audit filter | `test_math_rows_generated.py` | yes: OMML rendering in Word |
+| F-12 | documented limitation, loud | pinned test | no |
+| Suite (Pandoc 3.1.3) | 0 unit failures, 143 expected gate failures, 25 baseline AST failures, 0 unexplained; gate-bypass run: 0 new failures | `logs/phase2/` | full suite on 3.12/3.13 |
+
+Phase-1 summary follows (phase-1 verdict: not release-ready; superseded by the verdict above).
+
+Scope of phase 1: repository at `35547d4`; fixes `2d37916`, `a61debb`, `dd0b39b`. Same environment (Pandoc 3.1.3, no
+TeX, no Word): every claim that depends on Pandoc 3.12, TeX or Word is BLOCKED or NOT TESTED, not passed.
+
 
 ## What was found
 

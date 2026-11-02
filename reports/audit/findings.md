@@ -6,13 +6,29 @@ Priorities: P0 data loss / security / serious math alteration · P1 broken core 
 P2 compatibility / reliability / significant formatting · P3 minor.
 
 Environment for every executed result: Pandoc **3.1.3** (not the certified 3.12), no TeX, no Word
-(`logs/environment.txt`). Fixes: commits `2d37916` (F-01..F-04), `a61debb` (F-05) and a follow-up commit after the
-independent review (§"Independent review and follow-up").
+(`logs/environment.txt`). Fixes: commits `2d37916` (F-01..F-04), `a61debb` (F-05), `dd0b39b` (review follow-up) and
+phase 2 `98b8351`..`028ff97` (see [remediation-phase2.md](remediation-phase2.md)).
 
 ## Summary
 
-| ID | Title | P | Reproduced | Fixed | Regression test |
+Status after phase 2 (details: [remediation-phase2.md](remediation-phase2.md)).
+
+| ID | Title | P | Reproduced | Status after phase 2 | Regression test |
 |---|---|---|---|---|---|
+| F-01 | Alignment row starting with `[` silently deleted from equations | P0 | VERIFIED | fixed; 584-case generated matrix passes (277 failures on the pre-audit filter) | `test_audit_regressions.py::test_f01*`, `test_math_rows_generated.py` |
+| F-02 | Untrusted LaTeX makes Pandoc read files outside the project into the DOCX | P0 (untrusted input) | VERIFIED | **production: 12 vectors closed, 2 open** (`\iffalse` nesting, `filecontents`); **experimental confined reader closes all 14** (NEEDS_LOCAL_CERTIFICATION); trusted-input contract documented | `::test_f02*`, `test_confinement_prototype.py` |
+| F-03 | `\label{..{..}..}` with nested braces not stripped from math | P2 | VERIFIED | fixed | `::test_f03_*` |
+| F-04 | Reference command dropped by the reader without diagnostic | P1 | VERIFIED (3.1.3) | fixed **per occurrence** (`L2W-E-REF-012`) | `test_reference_occurrences.py` |
+| F-05 | `build` ignored the Pandoc compatibility verdict; probe errors were "UNSUPPORTED" | P1 | VERIFIED | fixed; probe errors are `PROBE_ERROR`/`L2W-E-PANDOC-004`; API pin = PVP major series `(1,23)` | `::test_f05*`, `test_probe_semantics.py` |
+| F-06 | `--output` overwrote project sources | P1 (release blocker) | **VERIFIED dynamically** (phase 2) | fixed (`L2W-E-OUTPUT-001..005`, before conversion) | `test_output_safety.py` |
+| F-07 | TeX may read arbitrary files while rendering TikZ | P2 | BLOCKED (no TeX) | open; threat boundary and isolation design in `SECURITY.md` | — |
+| F-08 | Every build fails on Pandoc 3.1.3 (its own `styles.xml` out of schema order) | P3 | VERIFIED | open (environmental; such a Pandoc is refused anyway) | — |
+| F-09 | 3 platform tests not portable to Linux | P3 | VERIFIED | fixed (tests only) | `test_platform_paths.py` |
+| F-10 | Historical claims not reproducible from the repository | — | see §F-10 | unchanged; README now attributes the thesis validation to the maintainer | — |
+| F-11 | Declared bibliography style silently replaced by Pandoc's default CSL | P2 | VERIFIED | fixed as detection (`L2W-W-BIB-014/015/016`; table in profile data) | `test_bibliography_style.py` |
+| F-12 | Two numbered rows in one `align`/`gather` is a hard error | P2 | VERIFIED | documented limitation; pinned as `L2W-E-MATH-003` | `test_math_rows_generated.py::test_f12_*` |
+
+---|---|---|---|---|---|
 | F-01 | Alignment row starting with `[` silently deleted from equations | P0 | VERIFIED | yes (incl. review follow-ups) | `test_audit_regressions.py::test_f01_*`, `::test_f01b_*` |
 | F-02 | Untrusted LaTeX makes Pandoc read files outside the project into the DOCX | P0 (untrusted input) | VERIFIED | **partially**: 10 vectors closed; 2 known scanner/reader mismatches remain open | `::test_f02_*`, `::test_f02b_*` |
 | F-03 | `\label{..{..}..}` with nested braces not stripped from math | P2 | VERIFIED | yes | `::test_f03_*` |
