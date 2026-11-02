@@ -268,7 +268,10 @@ def _pandoc_capabilities(diagnostic: Diagnostic | None, assessment: PandocAssess
             for n in names
         ]
     compat = assessment.compat
-    compat_state = CapabilityState.INCOMPATIBLE if compat is PandocCompat.UNSUPPORTED else CapabilityState.AVAILABLE
+    compat_state = {
+        PandocCompat.UNSUPPORTED: CapabilityState.INCOMPATIBLE,
+        PandocCompat.PROBE_ERROR: CapabilityState.UNTESTED,  # the probe did not run: no verdict either way
+    }.get(compat, CapabilityState.AVAILABLE)
     capabilities = [
         Capability("pandoc", "version", CapabilityState.AVAILABLE, assessment.version),
         Capability("pandoc", "compatibility", compat_state, compat.value, "; ".join(assessment.reasons) or None),
@@ -280,7 +283,8 @@ def _pandoc_capabilities(diagnostic: Diagnostic | None, assessment: PandocAssess
             why = "; ".join(assessment.reasons) if assessment.reasons else "probe not run (--no-probe)"
             capabilities.append(Capability("pandoc", name, CapabilityState.UNTESTED, detail=why))
         else:
-            state = CapabilityState.AVAILABLE if check.ok else CapabilityState.INCOMPATIBLE
+            state = (CapabilityState.AVAILABLE if check.ok
+                     else CapabilityState.UNTESTED if check.execution_error else CapabilityState.INCOMPATIBLE)
             capabilities.append(Capability("pandoc", name, state, detail=check.detail))
     return capabilities
 
@@ -350,6 +354,9 @@ def inspect_toolchain(
         findings = compat_findings(assessment)
         if assessment.compat is PandocCompat.UNSUPPORTED:
             message = "UNSUPPORTED: " + "; ".join(assessment.reasons)
+            diagnostics[index] = replace(diagnostic, status=Status.FAIL, severity=Severity.ERROR, message=message)
+        elif assessment.compat is PandocCompat.PROBE_ERROR:
+            message = "compatibility probe could not run (not a verdict on the version): " + "; ".join(assessment.reasons)
             diagnostics[index] = replace(diagnostic, status=Status.FAIL, severity=Severity.ERROR, message=message)
         elif assessment.compat is PandocCompat.TESTED_UNCERTIFIED:
             diagnostics[index] = _with_detail(diagnostic, "TESTED_UNCERTIFIED")

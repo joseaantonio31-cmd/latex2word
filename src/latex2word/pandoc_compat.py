@@ -44,8 +44,13 @@ CERTIFIED_VERSIONS: tuple[tuple[int, int], ...] = ((3, 12),)
 # present on a given install is decided by the Lua probe, not by this coarse gate.
 MINIMUM_VERSION: tuple[int, int] = (3, 0)
 
-# ``pandoc-api-version`` prefixes the pinned AST tests were written against (3.12 reports 1.23.1.2).
-PINNED_API_VERSIONS: tuple[tuple[int, ...], ...] = ((1, 23, 1),)
+# ``pandoc-api-version`` series the pinned AST tests were written against (3.12 reports 1.23.1.x).
+# pandoc-types follows the Haskell PVP: changes to the AST that a JSON consumer can observe (new or changed element
+# types, e.g. ``Figure`` in 1.23) bump the first two components; a third component only adds API without changing
+# the existing types. The pin is therefore the major series (1, 23), not a patch release. This only avoids rejecting a
+# compatible AST outright: the reader probe still checks the pinned AST facts, and certification stays per Pandoc
+# version (CERTIFIED_VERSIONS).
+PINNED_API_VERSIONS: tuple[tuple[int, ...], ...] = ((1, 23),)
 
 _VERSION = re.compile(r"(\d+(?:\.\d+)+)")
 
@@ -53,7 +58,8 @@ _VERSION = re.compile(r"(\d+(?:\.\d+)+)")
 class PandocCompat(str, Enum):
     SUPPORTED = "SUPPORTED"
     TESTED_UNCERTIFIED = "TESTED_UNCERTIFIED"
-    UNSUPPORTED = "UNSUPPORTED"
+    UNSUPPORTED = "UNSUPPORTED"  # an observed incompatibility (version floor, AST facts, failing capability)
+    PROBE_ERROR = "PROBE_ERROR"  # the probe could not run (timeout, launch error, signal): no verdict on the version
 
 
 @dataclass(frozen=True)
@@ -63,6 +69,7 @@ class ProbeCheck:
     name: str  # latex-reader | ast-api-version | docx-writer | lua-filters | citeproc
     ok: bool
     detail: str
+    execution_error: bool = False  # the step did not run to completion (not an observation about Pandoc)
 
 
 @dataclass(frozen=True)
@@ -178,6 +185,16 @@ def _ast_failures(ast: Any) -> list[str]:
     return failures
 
 
+def _execution_failure(result: CommandResult) -> bool:
+    """True when the probe step did not run to completion: launch error, timeout, or killed by a signal."""
+    return result.error is not None or result.timed_out or (result.returncode is not None and result.returncode < 0)
+
+
+def _check(name: str, result: CommandResult, detail: str) -> ProbeCheck:
+    """A failed check for ``result``; an execution failure is marked as such, never as an incompatibility."""
+    return ProbeCheck(name, False, _failed(result) if not result.ok else detail, _execution_failure(result))
+
+
 def _failed(result: CommandResult) -> str:
     if result.error is not None:
         return f"could not start: {' '.join(result.error.split())[:200]}"
@@ -190,10 +207,10 @@ def _failed(result: CommandResult) -> str:
 def _reader_and_ast_checks(run: Callable[[list[str]], CommandResult], tex: Path) -> list[ProbeCheck]:
     result = run(["--from", "latex", "--to", "json", str(tex)])
     if not result.ok:
-        reason = _failed(result)
+        reason, aborted = _failed(result), _execution_failure(result)
         return [
-            ProbeCheck("latex-reader", False, reason),
-            ProbeCheck("ast-api-version", False, "no AST available: " + reason),
+            ProbeCheck("latex-reader", False, reason, aborted),
+            ProbeCheck("ast-api-version", False, "no AST available: " + reason, aborted),
         ]
     try:
         ast = json.loads(result.stdout)
@@ -236,15 +253,13 @@ def run_probe(path: str, *, runner: Runner, timeout_s: float) -> tuple[ProbeChec
         if result.ok and docx.is_file() and docx.read_bytes()[:2] == b"PK":
             checks.append(ProbeCheck("docx-writer", True, "wrote a DOCX package"))
         else:
-            checks.append(ProbeCheck("docx-writer", False, _failed(result) if not result.ok else "no DOCX package written"))
+            checks.append(_check("docx-writer", result, "no DOCX package written"))
 
         result = run(["--from", "latex", "--to", "plain", "--lua-filter", str(root / "probe.lua"), str(root / "cite.tex")])
         if result.ok and _LUA_MARKER in result.stdout:
             checks.append(ProbeCheck("lua-filters", True, "Lua filter with pandoc.json ran"))
         else:
-            checks.append(
-                ProbeCheck("lua-filters", False, _failed(result) if not result.ok else "the Lua filter output was not produced")
-            )
+            checks.append(_check("lua-filters", result, "the Lua filter output was not produced"))
 
         result = run(
             ["--from", "latex", "--to", "plain", "--citeproc", "--bibliography", str(root / "probe.bib"), str(root / "cite.tex")]
@@ -252,7 +267,7 @@ def run_probe(path: str, *, runner: Runner, timeout_s: float) -> tuple[ProbeChec
         if result.ok and "Probeperson" in result.stdout:
             checks.append(ProbeCheck("citeproc", True, "formatted a citation from an inline bibliography"))
         else:
-            checks.append(ProbeCheck("citeproc", False, _failed(result) if not result.ok else "the citation was not formatted"))
+            checks.append(_check("citeproc", result, "the citation was not formatted"))
     return tuple(checks)
 
 
@@ -271,11 +286,18 @@ def assess_pandoc(
     if parsed is not None and parsed < MINIMUM_VERSION:
         reason = f"pandoc {shown} is older than the minimum {floor} (no Figure block / pandoc-api-version 1.23)"
         return PandocAssessment(PandocCompat.UNSUPPORTED, shown, (), (reason,))
-    checks = run_probe(path, runner=runner, timeout_s=timeout_s) if probe else ()
-    failed = [c for c in checks if not c.ok]
-    if failed:
-        reasons = tuple(f"{c.name}: {c.detail}" for c in failed)
+    try:
+        checks = run_probe(path, runner=runner, timeout_s=timeout_s) if probe else ()
+    except OSError as exc:  # e.g. the temporary probe directory cannot be created
+        return PandocAssessment(PandocCompat.PROBE_ERROR, shown, (), (f"probe setup failed: {exc}",))
+    observed = [c for c in checks if not c.ok and not c.execution_error]
+    if observed:  # real evidence of incompatibility wins over a step that merely did not run
+        reasons = tuple(f"{c.name}: {c.detail}" for c in observed)
         return PandocAssessment(PandocCompat.UNSUPPORTED, shown, checks, reasons)
+    aborted = [c for c in checks if not c.ok]
+    if aborted:
+        reasons = tuple(f"{c.name}: {c.detail}" for c in aborted)
+        return PandocAssessment(PandocCompat.PROBE_ERROR, shown, checks, reasons)
     if parsed in CERTIFIED_VERSIONS:
         return PandocAssessment(PandocCompat.SUPPORTED, shown, checks, ())
     certified = ", ".join(".".join(map(str, v)) for v in CERTIFIED_VERSIONS)
@@ -296,6 +318,15 @@ def compat_findings(assessment: PandocAssessment) -> list[Finding]:
                 "L2W-W-PANDOC-003",
                 Severity.WARNING,
                 f"pandoc {assessment.version} is TESTED_UNCERTIFIED: {reasons}; the build continues but the AST is not certified",
+            )
+        ]
+    if assessment.compat is PandocCompat.PROBE_ERROR:
+        return [
+            Finding(
+                "L2W-E-PANDOC-004",
+                Severity.ERROR,
+                f"the Pandoc compatibility probe could not run ({reasons}); pandoc {assessment.version} was not assessed "
+                "(this is a tool/probe error, not a verdict on the Pandoc version)",
             )
         ]
     return [Finding("L2W-E-PANDOC-003", Severity.ERROR, f"pandoc {assessment.version} is UNSUPPORTED: {reasons}")]

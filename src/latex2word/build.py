@@ -316,7 +316,7 @@ def run_build(
     # The same classification `doctor` reports. Without it a Pandoc whose reader AST differs from the pinned facts
     # was used silently (Pandoc 3.1.3 drops numbered-equation wrappers and \Cref without any diagnostic).
     assessment = assess_pandoc(tool.version, path=tool.path, runner=runner, timeout_s=config.tools.timeout_s, probe=True)
-    if assessment.compat is PandocCompat.UNSUPPORTED:
+    if assessment.compat in (PandocCompat.UNSUPPORTED, PandocCompat.PROBE_ERROR):
         # a tool problem, not a document one: same contract as an unusable Pandoc in locate_pandoc (exit code 2)
         finding = compat_findings(assessment)[0]
         raise BuildError(f"{finding.message} [{finding.code}]")
