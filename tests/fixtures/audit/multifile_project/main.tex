@@ -1,0 +1,13 @@
+% Audit fixture (2026-11, R3): multi-file project without TikZ, for comparing the production Pandoc path with the
+% experimental confined reader (flattened input + pandoc --sandbox). Do not edit: results are pinned.
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{notation}
+\begin{document}
+\section{Overview}\label{sec:overview}
+The method \method{} is described in Section~\ref{sec:details} and uses \cite{knuth1984}.
+\input{chapters/details}
+\include{chapters/results}
+\bibliography{refs}
+\end{document}

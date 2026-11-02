@@ -476,6 +476,30 @@ def run_build(
         resource_paths=[cwd],
         extra_args=profile.data["pandoc"]["extra_args"],
     )
+    if os.environ.get("LATEX2WORD_EXPERIMENTAL_CONFINED_READER") == "1":
+        # EXPERIMENTAL (audit R3): flattened source -> `pandoc --sandbox -f latex -t json` -> resource check ->
+        # the unchanged writer run on the JSON AST. See latex2word.confinement.
+        from dataclasses import replace as _replace
+
+        from latex2word.confinement import FlattenError, check_ast_resources, flatten, read_confined
+
+        note("EXPERIMENTAL: confined Pandoc reader")
+        try:
+            flat = flatten(staged_graph)
+        except FlattenError as exc:
+            result.findings.append(Finding("L2W-E-CONFINE-004", Severity.ERROR, f"the source cannot be flattened safely: {exc}"))
+            return _finish(result, config, profile, tool, workspace, figures_run, figure_plan, bib_plan, None, None,
+                           None, output, keep_workspace, records=records, changes=changes)
+        confined = read_confined(tool.path, flat, staged_graph, build_dir, timeout_s=config.tools.timeout_s, runner=runner)
+        result.findings.extend(confined.findings)
+        if confined.ast is not None:
+            result.findings.extend(check_ast_resources(confined.ast, cwd, staging))
+        if confined.ast is None or any(f.code.startswith("L2W-E-CONFINE") for f in result.findings):
+            return _finish(result, config, profile, tool, workspace, figures_run, figure_plan, bib_plan, None, None,
+                           None, output, keep_workspace, records=records, changes=changes)
+        ast_path = build_dir / "confined_ast.json"
+        _write_json(ast_path, confined.ast)
+        options = _replace(options, inputs=[str(ast_path)], from_format="json")
     pandoc_run: PandocRun = run_pandoc(tool, options, cwd=cwd, timeout_s=config.tools.timeout_s, runner=runner)
     _write_json(build_dir / "pandoc_run.json", pandoc_run.to_dict())
     missing_keys = {key for key in bib_plan.cited_keys if key not in bib_plan.defined}
