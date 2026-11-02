@@ -158,3 +158,69 @@ def check_labels(scan: LabelScan) -> list[Finding]:
             Finding("L2W-I-LABEL-003", Severity.INFO, f"{len(unreferenced)} label(s) never referenced: {', '.join(unreferenced)}")
         )
     return findings
+
+
+# ------------------------------------------------------------------ per-occurrence reference markers (audit F-04)
+
+# Reference commands that Pandoc's LaTeX reader turns into links (\pageref/\nameref are reported by the probe).
+LINKED_REFERENCE_COMMANDS = frozenset({"ref", "eqref", "autoref", "cref", "Cref", "vref"})
+OCCURRENCE_PREFIX = "l2wocc"
+
+
+@dataclass(frozen=True)
+class ReferenceOccurrence:
+    """One label inside one reference command of the source, with its own identity."""
+
+    id: int
+    command: str
+    label: str
+    location: SourceLocation
+
+
+def plan_reference_markers(graph: SourceGraph) -> tuple[list, list[ReferenceOccurrence]]:
+    """Staged-copy edits that write every reference label as ``l2wocc<n>:<label>``.
+
+    The filter strips the prefix and reports occurrence ``n`` for every reference that reached the AST, so the
+    build can detect the loss of a single occurrence even when other references to the same label survive.
+    Not marked (and therefore not checked): references inside macro/environment definition bodies (only text until
+    the macro is used), labels that are not literal (``#1``, macros), and arguments whose text differs from its
+    comment-masked form.
+    """
+    from latex2word.rewrite import Edit  # local import: rewrite imports source_graph like this module
+
+    edits: list[Edit] = []
+    occurrences: list[ReferenceOccurrence] = []
+    for rel in graph.tex_order:
+        scanned = graph.files.get(rel)
+        if scanned is None:
+            continue
+        masked, text = scanned.masked, scanned.text
+        spans = _definition_spans(masked)
+        for command in iter_commands(masked):
+            if command.name not in LINKED_REFERENCE_COMMANDS or any(a < command.start < b for a, b in spans):
+                continue
+            pos = skip_ws(masked, command.end)
+            while masked[pos : pos + 1] == "[":
+                optional = read_optional(masked, pos)
+                if optional is None:
+                    break
+                pos = skip_ws(masked, optional[2])
+            group = read_group(masked, pos)
+            if group is None or masked[group[0] : group[1]] != text[group[0] : group[1]]:
+                continue
+            labels = split_top_level(" ".join(text[group[0] : group[1]].split()))
+            if not labels or any(any(ch in label for ch in "\\#{}") or label.startswith(OCCURRENCE_PREFIX) for label in labels):
+                continue
+            where = SourceLocation(rel, scanned.lines.line(command.start))
+            marked = []
+            for label in labels:
+                occurrence = ReferenceOccurrence(len(occurrences) + 1, command.name, label, where)
+                occurrences.append(occurrence)
+                marked.append(f"{OCCURRENCE_PREFIX}{occurrence.id}:{label}")
+            edits.append(
+                Edit(rel, group[0], group[1], ",".join(marked), "reference-marker",
+                     "occurrence identity for the per-occurrence reference check (audit F-04)",
+                     ",".join(str(o.id) for o in occurrences[-len(labels):]))
+            )
+    return edits, occurrences
+

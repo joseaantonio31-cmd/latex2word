@@ -935,14 +935,23 @@ local pass_numbering = {
 
 local REF_TYPES = { ref = 'ref', eqref = 'eqref', ['ref+label'] = 'autoref', ['ref+Label'] = 'cref' }
 
-local function resolve_label(ref_type, label)
+-- Occurrence markers (audit F-04): the staged copy writes every source reference label as
+-- "l2wocc<n>:<label>", so each reference occurrence that survives the reader reports its own id.
+local function split_occurrence(item)
+  local n, rest = item:match('^l2wocc(%d+):(.*)$')
+  if n then return rest, tonumber(n) end
+  return item, nil
+end
+
+local function resolve_label(ref_type, label, occurrence)
   local kind = REF_TYPES[ref_type]
   if kind == nil then
     U.diag('L2W-E-REF-005', 'error', 'unsupported reference type "' .. tostring(ref_type) .. '" for "' .. tostring(label) .. '"')
+    S.refs[#S.refs + 1] = { label = label, type = tostring(ref_type), resolved = false, text = '??', occurrence = occurrence }
     return nil
   end
   local entry = S.labels[label]
-  local record = { label = label, type = kind, resolved = false, text = '??' }
+  local record = { label = label, type = kind, resolved = false, text = '??', occurrence = occurrence }
   S.refs[#S.refs + 1] = record
   if entry == nil then
     U.diag('L2W-E-REF-001', 'error', 'reference to undefined label "' .. tostring(label) .. '"')
@@ -981,7 +990,7 @@ end
 local function resolve_reference(link)
   local ref_type = link.attributes['reference-type']
   local label = link.attributes['reference'] or ''
-  if not label:find(',', 1, true) then return resolve_label(ref_type, label) end
+  if not label:find(',', 1, true) then return resolve_label(ref_type, split_occurrence(label)) end
   local labels = {}
   for item in label:gmatch('[^,]+') do
     item = item:gsub('^%s+', ''):gsub('%s+$', '')
@@ -994,7 +1003,8 @@ local function resolve_reference(link)
     if i > 1 then out:extend(U.text_inlines(i == #labels and conjunction or separator)) end
     -- \Cref{a,b} capitalises only the first item
     local item_type = (i > 1 and ref_type == 'ref+Label') and 'ref+label' or ref_type
-    local piece = resolve_label(item_type, item)
+    local item_label, item_occurrence = split_occurrence(item)
+    local piece = resolve_label(item_type, item_label, item_occurrence)
     if piece ~= nil then out:insert(piece) end
   end
   return out

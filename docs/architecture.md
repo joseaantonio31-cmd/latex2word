@@ -47,6 +47,17 @@ project.yaml + profile
    relationships, bookmarks, numbering, math, figures, bibliography, layout invariants; a layout report and a
    checklist for the review in Word. The output file is replaced atomically.
 
+## Invariants between the source and the conversion
+
+* **Reference occurrences** (audit F-04). Every `\ref`, `\eqref`, `\autoref`, `\cref`, `\Cref` and `\vref` label in
+  the live source (not in macro/environment definition bodies, and only literal labels) is written in the staged copy
+  as `l2wocc<n>:<label>` (`labels.plan_reference_markers`, transformation kind `reference-marker`). The filter strips the
+  prefix, resolves the label as usual and records `occurrence = n` in the filter report. After Pandoc, every `n` that
+  is missing from the report is `L2W-E-REF-012` at the original source location. The check is per occurrence: a dropped
+  `\Cref{a}` is reported even when another `\ref{a}` survives. Occurrences whose text is replaced by another staged
+  rewrite (e.g. inside a TikZ picture that becomes an SVG) are not checked.
+* **Output target** (audit F-06): see `output_safety.py`. The DOCX never replaces a build input or a non-DOCX file.
+
 ## Profiles and configuration
 
 `config.py` loads and validates the project file (`schemas/project.schema.json`); `profiles.py` loads YAML profiles

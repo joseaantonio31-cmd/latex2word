@@ -48,7 +48,7 @@ from latex2word.errors import BuildError
 from latex2word.figure_pipeline import FiguresRun, run_figures
 from latex2word.figure_registry import sha256_file
 from latex2word.figure_rewrite import FigurePlan, copy_assets, plan_figure_rewrites, remaining_tikz
-from latex2word.labels import check_labels, scan_labels
+from latex2word.labels import ReferenceOccurrence, check_labels, plan_reference_markers, scan_labels
 from latex2word.logging_utils import log_event
 from latex2word.metadata.adapters import MetadataExtraction, get_adapter
 from latex2word.metadata.model import DocumentMetadata
@@ -389,9 +389,11 @@ def run_build(
     # 5: rewrite the staged copy (never the source)
     copy_assets(figure_plan, workspace.path, staging)
     # a table inside a drawing that is replaced by its SVG needs no column expansion: the outer edit wins
-    edits = drop_contained([*figure_plan.edits, *column_plan.edits, *structure_plan.edits, *typeset_edits, *note_edits, *siunitx_plan.edits,
-                            *plan_longtable_rewrites(graph), *plan_multicolumn_rewrites(graph),
-                            *bib_plan.edits, *extraction.edits])
+    content_edits = [*figure_plan.edits, *column_plan.edits, *structure_plan.edits, *typeset_edits, *note_edits,
+                     *siunitx_plan.edits, *plan_longtable_rewrites(graph), *plan_multicolumn_rewrites(graph),
+                     *bib_plan.edits, *extraction.edits]
+    marker_edits, occurrences = _reference_markers(graph, content_edits)
+    edits = drop_contained([*content_edits, *marker_edits])
     records, changes = apply_edits(graph, staging, edits)
     _write_json(build_dir / "transformations.json", transformation_manifest(records, changes))
     rewritten = {
@@ -506,7 +508,7 @@ def run_build(
                 result.findings.append(
                     Finding("L2W-E-CITE-001", Severity.ERROR, f"citation key {cite['id']!r} is not defined in the bibliography")
                 )
-    result.findings.extend(_lost_references(scan_labels(staged_graph), report, label_scan))
+    result.findings.extend(_lost_references(occurrences, report))
     if _source_has_author(graph) and not extraction.metadata.authors and not any(
         f.code.startswith("L2W-E-META") for f in extraction.findings
     ):
@@ -581,37 +583,40 @@ def run_build(
                    layout_validation=checks.get("layout"), preliminary_path=preliminary)
 
 
-# Reference commands that Pandoc's LaTeX reader turns into links (\pageref/\nameref are reported by the probe).
-_LINKED_REFERENCE_COMMANDS = frozenset({"ref", "eqref", "autoref", "cref", "Cref", "vref"})
+def _reference_markers(graph: Any, content_edits: list[Any]) -> tuple[list[Any], list[ReferenceOccurrence]]:
+    """Marker edits that coexist with the content rewrites, and the occurrences they make checkable.
 
-
-def _lost_references(scan: Any, report: dict[str, Any], source_scan: Any = None) -> list[Finding]:
-    """Labels referenced in the staged source that never reached the filter as a reference.
-
-    Independent of the Pandoc version: a reader that drops a reference command (Pandoc 3.1.3 drops ``\\Cref``
-    together with its argument, without a warning) would otherwise remove the text silently.
+    A marker inside a content edit disappears with the text it marks (e.g. a TikZ picture replaced by its SVG): that
+    occurrence is legitimately not in the document and is not checked. A marker that would partially overlap a
+    content edit is dropped (never happens for whole-command rewrites; kept as a guard against ``apply_edits``
+    refusing the plan).
     """
-    seen = {str(ref.get("label")) for ref in report["refs"]}
-    # staged line numbers can shift after rewrites: report the original source location when there is one
-    source_location = {
-        (r.command, r.label): r.location for r in reversed(source_scan.references if source_scan else ())
-    }
-    findings: list[Finding] = []
-    reported: set[str] = set()
-    for reference in scan.references:
-        if reference.command not in _LINKED_REFERENCE_COMMANDS or reference.label in seen or reference.label in reported:
+    marker_edits, occurrences = plan_reference_markers(graph)
+    kept: list[Any] = []
+    checked: set[int] = set()
+    for edit in marker_edits:
+        if any(c.file == edit.file and c.start < edit.end and edit.start < c.end for c in content_edits):
             continue
-        if reference.in_definition:  # a macro body is only text until used (and may never be used)
-            continue
-        reported.add(reference.label)
-        findings.append(
-            Finding(
-                "L2W-E-REF-012", Severity.ERROR,
-                f'\\{reference.command}{{{reference.label}}} never reached the document: the Pandoc reader dropped it',
-                source_location.get((reference.command, reference.label), reference.location),
-            )
+        kept.append(edit)
+        checked.update(int(n) for n in (edit.subject or "").split(",") if n)
+    return kept, [o for o in occurrences if o.id in checked]
+
+
+def _lost_references(occurrences: list[ReferenceOccurrence], report: dict[str, Any]) -> list[Finding]:
+    """Every marked source reference occurrence that did not reach the filter (``L2W-E-REF-012``).
+
+    Per occurrence, not per label: a dropped ``\\Cref{a}`` is reported even when another ``\\ref{a}`` survives.
+    Independent of the Pandoc version (Pandoc 3.1.3 drops ``\\Cref`` together with its argument, silently).
+    """
+    seen = {int(ref["occurrence"]) for ref in report["refs"] if isinstance(ref, dict) and ref.get("occurrence") is not None}
+    return [
+        Finding(
+            "L2W-E-REF-012", Severity.ERROR,
+            f'\\{o.command}{{{o.label}}} never reached the document: the Pandoc reader dropped it',
+            o.location,
         )
-    return findings
+        for o in occurrences if o.id not in seen
+    ]
 
 
 class OutputSafetyError(BuildError):

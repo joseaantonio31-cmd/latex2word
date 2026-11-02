@@ -8,7 +8,7 @@ Each test names its finding (F-xx). The oracles are independent of the code unde
   so the tests do not depend on how a particular Pandoc release wraps ``\\begin{equation}``;
 * containment (F-02): the source graph must report an ERROR (which stops the build before Pandoc runs) for every
   construct that Pandoc was observed to open by itself from an arbitrary path;
-* reference loss (F-04): ``build._lost_references`` is fed a hand-built scan and filter report.
+* reference loss (F-04): see tests/test_reference_occurrences.py (per-occurrence invariant, phase 2).
 """
 
 from __future__ import annotations
@@ -24,7 +24,6 @@ from pandockit import PANDOC, document, requires_pandoc, run_filter
 from projectkit import make_project
 
 from latex2word.diagnostics import Severity
-from latex2word.labels import LabelReference, LabelScan
 from latex2word.source_graph import SourceLocation, build_source_graph
 
 FILTER_DIR = Path(__file__).resolve().parents[1] / "src" / "latex2word" / "filters"
@@ -195,34 +194,8 @@ def test_f02_commands_pandoc_does_not_open_stay_warnings(tmp_path: Path):
 
 
 # ---------------------------------------------------------------- F-04: reference dropped by the reader
-
-
-def _lost_references(*args):
-    from latex2word.build import _lost_references as lost  # absent before the fix: imported per test
-
-    return lost(*args)
-
-
-def _scan(*refs: tuple[str, str]) -> LabelScan:
-    return LabelScan((), tuple(LabelReference(label, command, SourceLocation("main.tex", 3)) for command, label in refs))
-
-
-def test_f04_reference_absent_from_the_filter_report_is_an_error():
-    findings = _lost_references(_scan(("Cref", "tab:a"), ("ref", "sec:b")), {"refs": [{"label": "sec:b"}]})
-    assert [(f.code, f.severity) for f in findings] == [("L2W-E-REF-012", Severity.ERROR)]
-    assert "tab:a" in findings[0].message and findings[0].location == SourceLocation("main.tex", 3)
-
-
-def test_f04_every_reference_present_or_reported_elsewhere_gives_no_finding():
-    report = {"refs": [{"label": "tab:a"}, {"label": "missing", "resolved": False}]}
-    assert _lost_references(_scan(("Cref", "tab:a"), ("ref", "missing"), ("pageref", "tab:z")), report) == []
-
-
-def test_f04_source_location_is_preferred_over_the_staged_one():
-    staged = LabelScan((), (LabelReference("x", "ref", SourceLocation("main.tex", 40)),))
-    source = LabelScan((), (LabelReference("x", "ref", SourceLocation("main.tex", 12)),))
-    [finding] = _lost_references(staged, {"refs": []}, source)
-    assert finding.location == SourceLocation("main.tex", 12)
+# The set-based check of the first remediation was replaced by the per-occurrence check (phase 2); its tests live in
+# tests/test_reference_occurrences.py.
 
 
 # ---------------------------------------------------------------- F-05: build ignored the Pandoc compatibility gate
@@ -341,21 +314,6 @@ def test_f02b_internal_names_and_redefinition_targets_are_not_errors(tmp_path: P
     root = make_project(tmp_path, {"main.tex": f"\\documentclass{{article}}\n{preamble}\n\\begin{{document}}x\\end{{document}}\n"})
     graph = build_source_graph(root, root / "main.tex")
     assert not graph.has_errors, [(f.code, f.message) for f in graph.findings]
-
-
-def test_f04b_reference_inside_an_unused_macro_body_is_not_reported(tmp_path: Path):
-    from latex2word.labels import scan_labels
-
-    root = make_project(
-        tmp_path,
-        {"main.tex": "\\documentclass{article}\n\\newcommand\\seeone{see Section~\\ref{sec:a}}\n"
-                     "\\begin{document}\n\\section{One}\\label{sec:a}\nText \\ref{sec:b}.\n\\end{document}\n"},
-    )
-    scan = scan_labels(build_source_graph(root, root / "main.tex"))
-    assert [(r.label, r.in_definition) for r in scan.references] == [("sec:a", True), ("sec:b", False)]
-    assert [f.message for f in _lost_references(scan, {"refs": []})] == [
-        "\\ref{sec:b} never reached the document: the Pandoc reader dropped it"
-    ]
 
 
 def test_f05b_probe_rejects_a_reader_that_strips_equation_wrappers_or_drops_cref():
