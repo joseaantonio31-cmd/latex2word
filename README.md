@@ -1,4 +1,8 @@
-# latex2word
+<p align="center">
+  <img src="assets/latex2word-banner.svg"
+       alt="latex2word — Structured LaTeX to Editable Word"
+       width="100%">
+</p>
 
 Convert structured LaTeX projects into editable Microsoft Word documents while preserving equations, tables,
 figures, references and document structure.
