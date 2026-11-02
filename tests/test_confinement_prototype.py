@@ -26,7 +26,7 @@ from conftest import REPO_ROOT
 from pandockit import PANDOC, requires_pandoc
 from projectkit import make_project
 
-from latex2word.confinement import FlattenError, check_ast_resources, flatten, read_confined
+from latex2word.confinement import check_ast_resources, flatten, read_confined, resource_dirs
 from latex2word.source_graph import SourceLocation, build_source_graph
 
 MULTIFILE = REPO_ROOT / "tests" / "fixtures" / "audit" / "multifile_project"
@@ -65,11 +65,69 @@ def test_flatten_keeps_unresolved_and_commented_inputs_out(tmp_path: Path):
     assert "A ONE\n B" in flat.text and "% \\input{gone}" in flat.text  # comment kept verbatim, not expanded
 
 
-def test_flatten_refuses_a_package_list_mixing_local_and_system_packages(tmp_path: Path):
-    root = make_project(tmp_path, {"main.tex": "\\documentclass{article}\n\\usepackage{amsmath,mine}\n\\begin{document}x\\end{document}\n",
-                                   "mine.sty": "\\newcommand\\x{y}\n"})
-    with pytest.raises(FlattenError, match="mixes a local package"):
-        flatten(build_source_graph(root, root / "main.tex"))
+def test_flatten_splits_a_package_list_mixing_local_and_system_packages(tmp_path: Path):
+    root = make_project(tmp_path, {
+        "main.tex": "\\documentclass{article}\n\\usepackage[final]{amsmath, mine ,graphicx,other}\n\\begin{document}x\\end{document}\n",
+        "mine.sty": "\\newcommand\\x{MINE}\n", "other.sty": "\\newcommand\\y{OTHER}\n"})
+    graph = build_source_graph(root, root / "main.tex")
+    text = flatten(graph).text
+    preamble = text[: text.index("\\begin{document}")]
+    # load order kept; system packages stay commands with their options; local ones inlined
+    order = [preamble.index(s) for s in ("\\usepackage[final]{amsmath}", "\\newcommand\\x{MINE}",
+                                         "\\usepackage[final]{graphicx}", "\\newcommand\\y{OTHER}")]
+    assert order == sorted(order)
+    assert "mine}" not in preamble and "other}" not in preamble
+    assert flatten(graph).locate(text.index("\\newcommand\\y"), graph) == SourceLocation("other.sty", 1)
+
+
+@requires_sandbox
+def test_confined_reader_reports_a_local_package_that_was_not_inlined(tmp_path: Path):
+    # the flattener inlines what the graph resolved; a project package it did not inline must not vanish silently
+    # (the sandbox reports a refused \usepackage only at INFO level, together with every system package)
+    root = make_project(tmp_path, {"main.tex": "\\documentclass{article}\n\\usepackage{amsmath}\n\\usepackage{late}\n"
+                                               "\\begin{document}\nA \\late{} B $x$\n\\end{document}\n"})
+    graph = build_source_graph(root, root / "main.tex")
+    (root / "late.sty").write_text("\\newcommand\\late{LATE}\n", encoding="utf-8")  # appears after the graph was built
+    work = tmp_path / "work"
+    work.mkdir()
+    read = read_confined(PANDOC, flatten(graph), graph, work, timeout_s=60)
+    assert "--verbose" in read.argv
+    assert [(f.code, f.location) for f in read.findings] == [("L2W-E-CONFINE-001", SourceLocation("main.tex", 3))]
+    assert "late.sty" in read.findings[0].message  # amsmath.sty, refused as well, is a system package: no finding
+
+
+@requires_sandbox
+def test_experimental_build_finds_graphicspath_images_like_production(tmp_path, monkeypatch):
+    # single-pass Pandoc resolves \graphicspath in the reader; the JSON AST does not carry it, so the separate writer
+    # run must get the same search path or the image is replaced by its description
+    png = (b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89"
+           b"\x00\x00\x00\rIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82")
+    source = make_project(tmp_path, {
+        "main.tex": "\\documentclass{article}\n\\usepackage{graphicx}\n\\graphicspath{{./figures/}}\n\\begin{document}\n"
+                    "\\begin{figure}\\includegraphics{logo.png}\\caption{Logo.}\\label{fig:l}\\end{figure}\n"
+                    "See Figure~\\ref{fig:l}.\n\\end{document}\n",
+        "figures/logo.png": png}, name="gpath")
+    prod, _ = _build(tmp_path, source, "prod", monkeypatch, experimental=False)
+    exp, ws = _build(tmp_path, source, "exp", monkeypatch, experimental=True)
+    assert prod.ok and exp.ok, ([str(f) for f in prod.errors], [str(f) for f in exp.errors])
+    assert (ws / "build" / "confined_ast.json").is_file()
+    media = [[n for n in zipfile.ZipFile(r.output).namelist() if n.startswith("word/media/")] for r in (prod, exp)]
+    assert len(media[0]) == 1 and media[0] == media[1]
+    docs = [zipfile.ZipFile(r.output).read("word/document.xml") for r in (prod, exp)]
+    assert docs[0] == docs[1]
+
+
+@requires_sandbox
+def test_experimental_build_converts_a_mixed_package_list_like_production(tmp_path, monkeypatch):
+    source = make_project(tmp_path, {
+        "main.tex": "\\documentclass{article}\n\\usepackage{amsmath,mine}\n\\begin{document}\nA \\mine{} B $\\frac{1}{2}$\n\\end{document}\n",
+        "mine.sty": "\\newcommand{\\mine}{MIXEDLIST}\n"}, name="mixed")
+    prod, _ = _build(tmp_path, source, "prod", monkeypatch, experimental=False)
+    exp, ws = _build(tmp_path, source, "exp", monkeypatch, experimental=True)
+    assert prod.ok and exp.ok, ([str(f) for f in prod.errors], [str(f) for f in exp.errors])
+    assert (ws / "build" / "confined_ast.json").is_file()
+    docs = [zipfile.ZipFile(r.output).read("word/document.xml") for r in (prod, exp)]
+    assert docs[0] == docs[1] and b"MIXEDLIST" in docs[1]
 
 
 # ---------------------------------------------------------------- AST resource check
@@ -92,6 +150,25 @@ def test_ast_resource_check(tmp_path: Path):
     assert any("does not exist" in p for p in problems)
 
 
+def test_ast_resource_check_follows_the_writer_search_path_and_stays_confined(tmp_path: Path):
+    staging = tmp_path / "staging"
+    (staging / "figures").mkdir(parents=True)
+    (staging / "figures" / "logo.png").write_bytes(b"png")
+    (tmp_path / "escape").mkdir()
+    (tmp_path / "escape" / "out.png").write_bytes(b"png")
+    ast = _image_ast("logo.png", "out.png")
+    assert len(check_ast_resources(ast, staging, staging)) == 2  # without the search path neither is found
+    problems = [f.message for f in check_ast_resources(ast, staging, staging, [staging, staging / "figures", tmp_path / "escape"])]
+    assert len(problems) == 1 and "out.png" in problems[0] and "outside the staged project" in problems[0]
+
+
+def test_resource_dirs_are_the_main_directory_then_the_graphicspath(tmp_path: Path):
+    root = make_project(tmp_path, {"main.tex": "\\documentclass{article}\n\\usepackage{graphicx}\n"
+                                               "\\graphicspath{{./figures/}{img/}}\n\\begin{document}x\\end{document}\n"})
+    graph = build_source_graph(root, root / "main.tex")
+    assert resource_dirs(graph, root) == [root, root / "figures", root / "img"]
+
+
 # ---------------------------------------------------------------- residual attacks
 
 
@@ -99,6 +176,14 @@ ATTACKS = {
     "iffalse-nesting": "Hello \\iffalse \\ifx \\fi \\input{@C@} \\fi end.",
     "filecontents": "\\begin{filecontents}{x.tex}\n\\input{@C@}\n\\end{filecontents}\nHi.",
 }
+
+
+def _attack_is_live(project: Path) -> bool:
+    """Control: does the UNCONFINED reader read the canary? Whether an attack is live depends on the Pandoc version
+    (``\\iffalse`` nesting reads the canary with Pandoc 3.1.3, not with 3.12/3.13)."""
+    plain = subprocess.run([PANDOC, "-f", "latex", "-t", "json", "main.tex"], cwd=project, capture_output=True,
+                           text=True, encoding="utf-8", errors="replace").stdout
+    return CANARY in plain
 
 
 @requires_sandbox
@@ -110,13 +195,14 @@ def test_confined_reader_keeps_the_residual_attacks_out_of_the_ast(tmp_path: Pat
     body = ATTACKS[attack].replace("@C@", secret.with_suffix("").as_posix())
     root = make_project(tmp_path, {"main.tex": f"\\documentclass{{article}}\n\\begin{{document}}\n{body}\n\\end{{document}}\n"})
     graph = build_source_graph(root, root / "main.tex")
-    # control: the unconfined reader does read the canary (the attack is real with this Pandoc)
-    plain = subprocess.run([PANDOC, "-f", "latex", "-t", "json", "main.tex"], cwd=root, capture_output=True, text=True).stdout
-    assert CANARY in plain
+    live = _attack_is_live(root)
     work = tmp_path / "work"
     work.mkdir()
     read = read_confined(PANDOC, flatten(graph), graph, work, timeout_s=60)
-    assert read.ast is not None and CANARY not in json.dumps(read.ast)
+    assert read.ast is not None and CANARY not in json.dumps(read.ast)  # whatever this Pandoc does
+    if not live:  # this Pandoc does not follow the construct at all: nothing to refuse
+        assert read.findings == []
+        return
     assert [f.code for f in read.findings] == ["L2W-E-CONFINE-001"]
     assert read.findings[0].location == SourceLocation("main.tex", 3 if attack == "iffalse-nesting" else 4)
 
@@ -170,9 +256,13 @@ def test_experimental_build_blocks_the_residual_attacks_end_to_end(tmp_path, mon
     make_project(tmp_path, {"main.tex": "\\documentclass{article}\n\\begin{document}\n"
                             + ATTACKS[attack].replace("@C@", secret.with_suffix("").as_posix()) + "\n\\end{document}\n"},
                  name="src")
+    live = _attack_is_live(source)
     result, ws = _build(tmp_path, source, attack, monkeypatch, experimental=True)
-    assert not result.ok and "L2W-E-CONFINE-001" in {f.code for f in result.errors}
-    assert result.output is None and not (ws / "build" / "preliminary.docx").exists()
-    for path in ws.rglob("*"):
+    for path in [*ws.rglob("*"), *(tmp_path / f"out-{attack}").rglob("*")]:
         if path.is_file():
             assert CANARY.encode() not in path.read_bytes(), path
+    if not live:  # not followed by this Pandoc: the build converts the visible text and nothing else
+        assert result.ok, [str(f) for f in result.errors]
+        return
+    assert not result.ok and "L2W-E-CONFINE-001" in {f.code for f in result.errors}
+    assert result.output is None and not (ws / "build" / "preliminary.docx").exists()
