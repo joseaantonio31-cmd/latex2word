@@ -111,7 +111,8 @@ def test_build_manifest_records_versions_hashes_transformations_and_semantics(tm
     assert manifest["figure_manifest_sha256"] == hashlib.sha256((ws / "figures" / "figure_manifest.json").read_bytes()).hexdigest()
     assert manifest["output"]["sha256"] == hashlib.sha256(result.output.read_bytes()).hexdigest()
     assert [f["name"] for f in manifest["filters"]] == ["l2w_semantic.lua", "l2w_math.lua", "l2w_util.lua"]
-    assert {t["kind"] for t in manifest["transformations"]} == {"figure-width", "bibliography-remove"}
+    # reference-marker: the per-occurrence markers of F-04 (L2W-E-REF-012) are staged-copy edits too
+    assert {t["kind"] for t in manifest["transformations"]} == {"figure-width", "bibliography-remove", "reference-marker"}
     assert manifest["numbering"]["figures"] == ["Figure 1", "Figure 2"]
     assert manifest["semantic_counts"]["equations"] == 2 and manifest["bibliography"]["mode"] == "citeproc"
     assert "word/document.xml" in manifest["docx_part_hashes"] and manifest["docx_metrics"]["drawings"] == 2

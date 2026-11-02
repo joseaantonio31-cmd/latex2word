@@ -144,7 +144,8 @@ def test_contents_entry_styles_and_list_level(built):
     assert 'TOC \\h \\z \\t &quot;Table Caption,5&quot;' in document or 'TOC \\h \\z \\t "Table Caption,5"' in document
     toc1, toc2, toc5 = (_style_block(styles, s) for s in ("TOC1", "TOC2", "TOC5"))
     assert '<w:name w:val="toc 1"/>' in toc1 and "<w:b/>" in toc1 and 'w:before="240"' in toc1 and 'w:after="0"' in toc1
-    assert '<w:tab w:val="right" w:leader="dot"' in toc1
+    # attribute order is not significant (Pandoc 3.12 rewrites the reference styles with sorted attributes)
+    assert re.search(r'<w:tab (?=[^>]*w:val="right")(?=[^>]*w:leader="dot")', toc1), toc1
     assert 'w:before="100"' in toc2 and 'w:left="360"' in toc2
     assert 'w:left="890"' in toc5 and 'w:hanging="540"' in toc5 and 'w:line="360"' in toc5
 

@@ -100,12 +100,18 @@ def test_math_structure_matches_the_source(build):
     assert kinds["eqArr"] == 0  # alignment rows are matrices: no literal '&'
     text = "".join(t.text or "" for t in root.iter(f"{{{M}}}t"))
     assert "&" not in text and "2pt" not in text
-    # F-01: the row "[x,y] &= z" keeps its bracketed content
+    # F-01: the row "[x,y] &= z" keeps its bracketed content, in its own row and columns. Pandoc 3.1.3 writes the
+    # brackets as an m:d delimiter; 3.12/3.13 as literal "[" "]" runs (after the zero-width guard of the row start).
     delimiters = [
         (d.find(f"{{{M}}}dPr/{{{M}}}begChr"), "".join(t.text or "" for t in d.iter(f"{{{M}}}t")))
         for d in root.iter(f"{{{M}}}d")
     ]
-    assert any(b is not None and b.get(f"{{{M}}}val") == "[" and inner == "x,y" for b, inner in delimiters)
+    as_delimiter = any(b is not None and b.get(f"{{{M}}}val") == "[" and inner == "x,y" for b, inner in delimiters)
+    rows = [
+        ["".join(t.text or "" for t in cell.iter(f"{{{M}}}t")).replace("​", "") for cell in row.findall(f"{{{M}}}e")]
+        for row in root.iter(f"{{{M}}}mr")
+    ]
+    assert as_delimiter or any(cells[:2] == ["[x,y]", "=z"] for cells in rows), rows
 
 
 def test_text_escapes_and_accents_survive(build):

@@ -99,7 +99,12 @@ def test_relative_alias_of_a_source_is_recognised(project: Path, monkeypatch: py
 def test_case_variant_matches_only_under_case_insensitive_semantics(project: Path):
     variant = project / "MAIN.TEX"
     assert "L2W-E-OUTPUT-002" in codes(project, variant, case_insensitive=True)
-    assert "L2W-E-OUTPUT-002" not in codes(project, variant, case_insensitive=False)
+    if os.path.exists(variant):
+        # case-insensitive file system: MAIN.TEX *is* main.tex, and realpath returns the stored spelling, so the
+        # input is recognised even without case folding (the safe answer)
+        assert "L2W-E-OUTPUT-002" in codes(project, variant, case_insensitive=False)
+    else:
+        assert "L2W-E-OUTPUT-002" not in codes(project, variant, case_insensitive=False)
     assert canonical("C:/A/B.docx", case_insensitive=True) == canonical("c:/a/b.DOCX", case_insensitive=True)
 
 
