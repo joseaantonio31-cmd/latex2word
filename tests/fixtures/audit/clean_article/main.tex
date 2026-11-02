@@ -1,0 +1,26 @@
+% Audit fixture (2026-11): constructs that convert identically with Pandoc 3.1.3 and 3.12,
+% used for determinism, OOXML-integrity and math-preservation evidence. Do not edit: results are pinned.
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\begin{document}
+\tableofcontents
+\section{Mathematics}\label{sec:math}
+Inline $\frac{a}{b}$, $\sqrt[3]{x^{2}}$, $\alpha+\beta=\Gamma$, $x_{i}^{2}$ and $\int_{0}^{\infty} e^{-x}\,dx$.
+\[ \sum_{n=0}^{N} \binom{N}{n} = 2^{N} \]
+\[ \begin{aligned} a &= b + c \\ [x,y] &= z \\[2pt] d &\le e \end{aligned} \]
+\[ f(x) = \begin{cases} 1 & x > 0 \\ 0 & x \le 0 \end{cases} \]
+\[ \mathbf{A} = \begin{pmatrix} 1 & 2 \\ 3 & 4 \end{pmatrix}, \quad \lim_{x \to 0} \frac{\sin x}{x} = 1 \]
+\section{Tables}\label{sec:tab}
+See Section~\ref{sec:math}. Escaped text: 100\% \& \$5 \# \_ \{ \}.
+\begin{table}[h]
+\centering
+\caption{A table}\label{tab:one}
+\begin{tabular}{|l|c|r|}
+\hline
+a & $x^2$ & 3 \\ \hline
+\multicolumn{2}{|c|}{span} & 4 \\ \hline
+\end{tabular}
+\end{table}
+Accented: Pérez, Müller, Ñandú, Łukasz.
+\end{document}

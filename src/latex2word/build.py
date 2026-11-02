@@ -494,6 +494,7 @@ def run_build(
                 result.findings.append(
                     Finding("L2W-E-CITE-001", Severity.ERROR, f"citation key {cite['id']!r} is not defined in the bibliography")
                 )
+    result.findings.extend(_lost_references(scan_labels(staged_graph), report, label_scan))
     if _source_has_author(graph) and not extraction.metadata.authors and not any(
         f.code.startswith("L2W-E-META") for f in extraction.findings
     ):
@@ -566,6 +567,37 @@ def run_build(
                    validation=validation, reference=reference, extraction=extraction, metadata=metadata,
                    finalization=finalization, final_validation=checks.get("semantic"),
                    layout_validation=checks.get("layout"), preliminary_path=preliminary)
+
+
+# Reference commands that Pandoc's LaTeX reader turns into links (\pageref/\nameref are reported by the probe).
+_LINKED_REFERENCE_COMMANDS = frozenset({"ref", "eqref", "autoref", "cref", "Cref", "vref"})
+
+
+def _lost_references(scan: Any, report: dict[str, Any], source_scan: Any = None) -> list[Finding]:
+    """Labels referenced in the staged source that never reached the filter as a reference.
+
+    Independent of the Pandoc version: a reader that drops a reference command (Pandoc 3.1.3 drops ``\\Cref``
+    together with its argument, without a warning) would otherwise remove the text silently.
+    """
+    seen = {str(ref.get("label")) for ref in report["refs"]}
+    # staged line numbers can shift after rewrites: report the original source location when there is one
+    source_location = {
+        (r.command, r.label): r.location for r in reversed(source_scan.references if source_scan else ())
+    }
+    findings: list[Finding] = []
+    reported: set[str] = set()
+    for reference in scan.references:
+        if reference.command not in _LINKED_REFERENCE_COMMANDS or reference.label in seen or reference.label in reported:
+            continue
+        reported.add(reference.label)
+        findings.append(
+            Finding(
+                "L2W-E-REF-012", Severity.ERROR,
+                f'\\{reference.command}{{{reference.label}}} never reached the document: the Pandoc reader dropped it',
+                source_location.get((reference.command, reference.label), reference.location),
+            )
+        )
+    return findings
 
 
 def _split_keywords(texts: Any) -> tuple[str, ...] | None:
