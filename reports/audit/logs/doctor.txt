@@ -1,0 +1,25 @@
+Optional
+  [WARN] pdflatex              not found on PATH
+  [WARN] inkscape              not found on PATH
+  [WARN] rsvg-convert          not found on PATH
+  [PASS] pdftocairo            pdftocairo version 24.02.0  (/usr/bin/pdftocairo)
+  [WARN] pandoc-tex-numbering  not found on PATH
+Capabilities
+  [AVAILABLE   ] pandoc/version          3.1.3
+  [INCOMPATIBLE] pandoc/compatibility    UNSUPPORTED
+  [INCOMPATIBLE] pandoc/latex-reader
+  [AVAILABLE   ] pandoc/ast-api-version
+  [AVAILABLE   ] pandoc/docx-writer
+  [AVAILABLE   ] pandoc/lua-filters
+  [AVAILABLE   ] pandoc/citeproc
+  [AVAILABLE   ] svg/pdf-backend         pdftocairo
+  [AVAILABLE   ] svg/pdftocairo          pdftocairo version 24.02.0
+  [MISSING     ] svg/inkscape
+  [MISSING     ] svg/dvisvgm
+  [MISSING     ] svg/rsvg-convert
+  [MISSING     ] tex/latex
+  [MISSING     ] tex/pdflatex
+  [MISSING     ] tex/kpsewhich
+Findings
+  ERROR: pandoc 3.1.3 is UNSUPPORTED: latex-reader: AST differs from the pinned facts: \linewidth width as a percentage [L2W-E-PANDOC-003]
+Result: NOT_READY (required: 1 pass, 3 fail; optional: 1 pass, 4 warn)

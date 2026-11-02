@@ -4,9 +4,9 @@
 * package integrity: the independent oracle (tools/audit/ooxml_oracle.py) finds no fault;
 * math preservation: OMML structure and content checked against expectations derived by hand from the source.
 
-With an uncertified Pandoc (the audit container has 3.1.3) every build fails on L2W-E-LAYOUT-090 because that
-Pandoc's own default styles.xml breaks the schema order; only that one check is disabled then, and the reason is
-recorded. With the certified Pandoc the full validator runs.
+With an uncertified Pandoc (the audit container has 3.1.3) every build fails on L2W-E-PANDOC-003 (the compatibility
+gate, F-05) and on L2W-E-LAYOUT-090 (that Pandoc's own default styles.xml breaks the schema order); both are bypassed
+then, and the reason is recorded. With the certified Pandoc the full pipeline and validator run unmodified.
 """
 
 from __future__ import annotations
@@ -48,9 +48,17 @@ def _pandoc_certified() -> bool:
 @pytest.fixture
 def build(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     if not _pandoc_certified():
+        import latex2word.build as build_module
         import latex2word.ooxml.validation as validation
+        from latex2word.pandoc_compat import PandocAssessment, PandocCompat
 
         monkeypatch.setattr(validation, "_check_schema_order", lambda roots, result: None)
+        # the compatibility gate (F-05) rightly refuses Pandoc 3.1.3; the fixture avoids every construct whose AST
+        # differs, so the gate is bypassed here to obtain finaliser evidence -- never a claim of certified behaviour
+        monkeypatch.setattr(
+            build_module, "assess_pandoc",
+            lambda version, **_: PandocAssessment(PandocCompat.TESTED_UNCERTIFIED, version or "unknown", (), ("audit",)),
+        )
     project = tmp_path / "project"
     shutil.copytree(FIXTURE, project)
 
