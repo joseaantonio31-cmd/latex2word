@@ -263,7 +263,9 @@ def test_dynamic_and_unsupported_constructs_produce_diagnostics_not_guesses(tmp_
     assert graph.tex_files == ["main.tex"]
     assert codes(graph).count("dynamic-path") == 2
     assert {"unsupported-syntax", "unsupported-command"} <= set(codes(graph))
-    assert not graph.has_errors
+    # Audit 2026-11 (reports/audit/findings.md, F-02): Pandoc itself expands \input{<macro>}, \includegraphics{<macro>}
+    # and \subfile{...} and opens the file from any path, so these are errors (they used to be warnings).
+    assert graph.has_errors
 
 
 def test_nested_braces_in_option_and_path_arguments(tmp_path: Path):

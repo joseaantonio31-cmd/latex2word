@@ -61,8 +61,16 @@ _UNSUPPORTED_COMMANDS: dict[str, str] = {
     "InputIfFileExists": "\\InputIfFileExists is not supported; its target is not followed",
     "lstinputlisting": "\\lstinputlisting is not supported; its target is not followed",
     "verbatiminput": "\\verbatiminput is not supported; its target is not followed",
+    "inputminted": "\\inputminted is not supported; its target is not followed",
     "includeonly": "\\includeonly changes which \\include files are active; it is ignored",
 }
+# Commands whose target Pandoc's LaTeX reader opens by itself (observed with Pandoc 3.1.3: the file's text lands
+# in the document, from any path, including absolute ones and ones outside the project). latex2word does not
+# follow, stage or contain them, so they are errors: the content is either lost or read from an unchecked path.
+_PANDOC_READS_TARGET = frozenset({"subfile", "lstinputlisting", "inputminted"})
+_UNCONTAINED_READ = (
+    "; Pandoc would open the target itself, outside latex2word's project-root containment and staging"
+)
 _PGFPLOTS_DATA_COMMANDS = frozenset({"addplot", "pgfplotstableread"})  # ddplot3 is ddplot + "3"
 _CLASS_COMMANDS = frozenset({"documentclass", "LoadClass", "LoadClassWithOptions"})
 _PACKAGE_COMMANDS = _CLASS_COMMANDS | {"usepackage", "RequirePackage", "RequirePackageWithOptions"}
@@ -405,7 +413,12 @@ class _Walker:
         elif name in _PGFPLOTS_DATA_COMMANDS:
             self._handle_pgfplots_data(command, rel, masked, location)
         elif name in _UNSUPPORTED_COMMANDS:
-            self._finding("unsupported-command", Severity.WARNING, _UNSUPPORTED_COMMANDS[name], location)
+            if name in _PANDOC_READS_TARGET:
+                self._finding(
+                    "unsupported-command", Severity.ERROR, _UNSUPPORTED_COMMANDS[name] + _UNCONTAINED_READ, location
+                )
+            else:
+                self._finding("unsupported-command", Severity.WARNING, _UNSUPPORTED_COMMANDS[name], location)
 
     # ---- \input / \include ----------------------------------------------------------------
 
@@ -413,19 +426,21 @@ class _Walker:
         kind = EdgeKind.INCLUDE if command.name == "include" else EdgeKind.INPUT
         arg = _braced(masked, command.end)
         if arg is None:
+            # also the shape of an alias (\let\inp\input), which Pandoc honours: \inp{/any/path} is read
             self._finding(
                 "unsupported-syntax",
-                Severity.WARNING,
-                f"\\{command.name} without a braced argument is not supported; target not followed",
+                Severity.ERROR,
+                f"\\{command.name} without a braced argument is not supported; target not followed" + _UNCONTAINED_READ,
                 location,
             )
             return
         raw = " ".join(arg[0].split())
         if not raw or _is_dynamic(raw):
+            # Pandoc expands the macro and reads whatever file it names (any path): never a warning.
             self._finding(
                 "dynamic-path",
-                Severity.WARNING,
-                f"\\{command.name}{{{raw}}}: path is not a literal; target not followed",
+                Severity.ERROR,
+                f"\\{command.name}{{{raw}}}: path is not a literal; target not followed" + _UNCONTAINED_READ,
                 location,
             )
             self.graph.edges.append(Edge(rel, None, kind, raw, Resolution.DYNAMIC, location, offset=command.start))
@@ -482,16 +497,19 @@ class _Walker:
             pos = skip_ws(masked, group[2])
         arg = _braced(masked, pos)
         if arg is None:
+            # also the shape of an alias (\let\ig\includegraphics), which Pandoc honours
             self._finding(
-                "unsupported-syntax", Severity.WARNING, "\\includegraphics without a braced argument is not supported", location
+                "unsupported-syntax", Severity.ERROR,
+                "\\includegraphics without a braced argument is not supported" + _UNCONTAINED_READ, location,
             )
             return
         raw = " ".join(arg[0].split()).strip('"')
         if not raw or _is_dynamic(raw):
+            # the DOCX writer would embed whatever file the expanded macro names (any path): never a warning
             self._finding(
                 "dynamic-path",
-                Severity.WARNING,
-                f"\\includegraphics{{{raw}}}: path is not a literal; asset not resolved",
+                Severity.ERROR,
+                f"\\includegraphics{{{raw}}}: path is not a literal; asset not resolved" + _UNCONTAINED_READ,
                 location,
             )
             self.graph.edges.append(

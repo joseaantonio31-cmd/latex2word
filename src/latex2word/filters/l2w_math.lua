@@ -89,7 +89,14 @@ end
 
 -- Split `s` at top-level row ("\\") or cell ("&") separators: not inside braces
 -- and not inside a nested \begin ... \end.
-local function top_split(s, mode)
+--
+-- A row break may carry a spacing argument ("\\[2pt]", "\\*[2pt]"). amsmath
+-- looks for it with \new@ifnextchar, which does NOT skip spaces: in align,
+-- aligned, gather, split, ... "\\ [x,y]" ends the row and starts the next one
+-- with the content "[x,y]". Only the kernel environments (array, eqnarray) look
+-- past spaces. `kernel_rows` selects that behaviour; by default the bracket is
+-- consumed only when it follows the break immediately.
+local function top_split(s, mode, kernel_rows)
   local parts, start, i, n = {}, 1, 1, #s
   local brace, env = 0, 0
   while i <= n do
@@ -102,7 +109,9 @@ local function top_split(s, mode)
           i = i + 2
           if s:sub(i, i) == '*' then i = i + 1 end
           local j = i
-          while s:sub(j, j):match('%s') do j = j + 1 end
+          if kernel_rows then
+            while s:sub(j, j):match('%s') do j = j + 1 end
+          end
           if s:sub(j, j) == '[' then
             local close = s:find(']', j, true)
             if close then i = close + 1 end
@@ -138,10 +147,23 @@ local function top_split(s, mode)
   return parts
 end
 
-local function split_rows(body)
-  local rows = top_split(body, 'row')
+-- True for the LaTeX-kernel environments whose \\ skips spaces before "[".
+local function kernel_rows_of(name)
+  return name == 'array' or name == 'eqnarray' or name == 'eqnarray*'
+end
+
+local function split_rows(body, kernel_rows)
+  local rows = top_split(body, 'row', kernel_rows)
   if #rows > 0 and trim(rows[#rows]) == '' then table.remove(rows) end
   return rows
+end
+
+-- A row whose text starts with "[" would be read as the spacing argument of the
+-- preceding "\\" by the writer (texmath applies kernel array rules). An empty
+-- group in front keeps the bracket as content.
+local function guard_row_start(text)
+  if text:sub(1, 1) == '[' then return '{}' .. text end
+  return text
 end
 
 -- Column specification: `pattern` repeated up to `count` columns.
@@ -235,9 +257,10 @@ local function normalize_inner(s)
     out[#out + 1] = s:sub(pos, b - 1)
     local body, n_inner = normalize_inner(s:sub(body_start, close_start - 1))
     local rows, columns = {}, user_columns or 1
-    for _, row in ipairs(split_rows(body)) do
+    for _, row in ipairs(split_rows(body, kernel_rows_of(name))) do
       local cells = top_split(row, 'cell')
       for k, cell in ipairs(cells) do cells[k] = trim(cell) end
+      cells[1] = guard_row_start(cells[1])
       columns = math.max(columns, #cells)
       rows[#rows + 1] = cells
     end
@@ -306,8 +329,9 @@ end
 -- Remove \label{..}, \nonumber and \notag from `text`; returns text, labels, nonumber.
 local function strip_markers(text)
   local labels, nonumber = {}, false
-  text = text:gsub('\\label%s*{([^{}]*)}', function(label)
-    labels[#labels + 1] = trim(label)
+  -- %b{} matches a balanced group, so a label such as eq:a_{1} is removed whole
+  text = text:gsub('\\label%s*(%b{})', function(group)
+    labels[#labels + 1] = trim(group:sub(2, -2))
     return ''
   end)
   local function drop(cmd)
@@ -368,7 +392,7 @@ function M.analyze(text, display)
   local numbered_rows = 0
   if wrapper and wrapper.rows then
     -- Multi-row environments: row markers decide which rows are numbered.
-    local rows = split_rows(body)
+    local rows = split_rows(body, kernel_rows_of(wrapper_name))
     local kept, row_labels = {}, {}
     for _, row in ipairs(rows) do
       local stripped, labels, nonumber = strip_markers(row)
@@ -379,7 +403,7 @@ function M.analyze(text, display)
       elseif #labels > 0 then
         fail('L2W-E-LABEL-002', 'label "' .. labels[1] .. '" is attached to an unnumbered equation row')
       end
-      kept[#kept + 1] = stripped
+      kept[#kept + 1] = kernel_rows_of(wrapper_name) and stripped or guard_row_start(trim(stripped))
     end
     if numbered_rows > 1 then
       fail('L2W-E-MATH-003', 'the numbered multi-row environment "' .. wrapper_name
