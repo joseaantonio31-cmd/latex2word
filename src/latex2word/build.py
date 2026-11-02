@@ -58,6 +58,7 @@ from latex2word.ooxml.finalize import FinalizeContext, FinalizeResult, finalize_
 from latex2word.ooxml.validation import LayoutExpectations, LayoutValidation, validate_layout
 from latex2word.pandoc_adapter import PandocOptions, PandocRun, PandocTool, locate_pandoc, run_pandoc
 from latex2word.pandoc_compat import PandocCompat, assess_pandoc, compat_findings
+from latex2word.output_safety import check_output_target, protected_inputs
 from latex2word.process import run_command
 from latex2word.profiles import Profile, load_profile
 from latex2word.reference_doc import ReferenceDoc, build_reference_docx
@@ -320,6 +321,8 @@ def run_build(
         finding = compat_findings(assessment)[0]
         raise BuildError(f"{finding.message} [{finding.code}]")
     result.findings.extend(f for f in compat_findings(assessment) if f.severity is not Severity.INFO)
+    # F-06: refuse a dangerous output target before any conversion work starts
+    _assert_safe_output(config, output)
 
     # 1-3: inspect, workspace, staging, figures (M2)
     note("inspecting, staging and rendering figures")
@@ -611,6 +614,36 @@ def _lost_references(scan: Any, report: dict[str, Any], source_scan: Any = None)
     return findings
 
 
+class OutputSafetyError(BuildError):
+    """The requested output target would overwrite an input or another non-DOCX file (exit code 2)."""
+
+    def __init__(self, findings: list[Finding]) -> None:
+        self.findings = findings
+        super().__init__("; ".join(f"{f.message} [{f.code}]" for f in findings))
+
+
+def _destination(config: ProjectConfig, output: Path | None) -> Path:
+    if output is not None:
+        return Path(output)
+    return config.output.directory / (config.output.filename or f"{config.project.main.stem}.docx")
+
+
+def _assert_safe_output(config: ProjectConfig, output: Path | None) -> None:
+    """Raise :class:`OutputSafetyError` unless the output target is safe (see ``output_safety``)."""
+    graph = build_source_graph(config.project.root, config.project.main)
+    root = config.project.root
+    extra = [config.config_file, *[root / Path(*PurePosixPath(rel).parts) for rel in config.staging.extra_files]]
+    if config.bibliography.csl is not None:
+        extra.append(config.bibliography.csl)
+    extra += [root / Path(*PurePosixPath(rel).parts) for rel in config.bibliography.files]
+    findings = check_output_target(
+        _destination(config, output), project_root=root, output_directory=config.output.directory,
+        inputs=protected_inputs(graph, extra),
+    )
+    if findings:
+        raise OutputSafetyError(findings)
+
+
 def _split_keywords(texts: Any) -> tuple[str, ...] | None:
     """Keyword terms from the rendered keyword block(s): comma/semicolon separated, trailing period dropped."""
     blocks = _as_list(texts)
@@ -660,9 +693,8 @@ def _finish(
     destination: Path | None = None
     output_sha: str | None = None
     if result.ok and deliverable is not None:
-        destination = Path(output) if output is not None else config.output.directory / (
-            config.output.filename or f"{config.project.main.stem}.docx"
-        )
+        destination = _destination(config, output)
+        _assert_safe_output(config, output)  # again, right before writing (the tree may have changed meanwhile)
         destination = destination.resolve()
         _atomic_copy(deliverable, destination)
         result.output = destination
