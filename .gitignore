@@ -1,0 +1,40 @@
+# Python environments and caches
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Build artefacts
+dist/
+build/
+*.egg-info/
+
+# latex2word per-project workspaces (staging builds, owned by the tool)
+.latex2word/
+
+# Local conversion runs and scratch workspaces (they contain converted documents; never commit them)
+runs/
+work/
+
+# Local, private integration expectations (LATEX2WORD_INTEGRATION_EXPECTATIONS); keep them out of the repository
+*.local.json
+
+# Microsoft Office lock and temporary files
+~$*
+*.tmp
+
+# Logs
+*.log
+
+# Editors and OS metadata
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# NOTE: *.pdf, *.docx, *.tex, *.bib, *.svg, *.png, *.json and *.yaml are
+# deliberately NOT ignored; they may be legitimate fixtures or assets.

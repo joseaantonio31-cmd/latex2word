@@ -1,0 +1,6 @@
+schema_version: 1
+project:
+  name: minimal-fixture
+  root: .
+  main: main.tex
+profile: ieee-conference

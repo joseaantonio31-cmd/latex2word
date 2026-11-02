@@ -1,0 +1,409 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:latex2word:schema:profile:1",
+  "title": "latex2word conversion profile, schema version 1",
+  "description": "One profile file. Every key except profile_schema_version and id is optional here: a file may override only part of the profile it extends. The merged result is checked for completeness by the loader.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["profile_schema_version", "id"],
+  "properties": {
+    "profile_schema_version": { "type": "integer", "enum": [1] },
+    "id": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+    "display_name": { "type": "string", "minLength": 1 },
+    "extends": {
+      "description": "Identifier of the profile this one overrides.",
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+    },
+    "required_tools": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+    "optional_tools": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+    "numbering": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sections": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "separator": { "description": "Inserted between the heading number and the heading text.", "type": "string" },
+            "level1": { "$ref": "#/$defs/sectionLevel" },
+            "level2": { "$ref": "#/$defs/sectionLevel" },
+            "level3": { "$ref": "#/$defs/sectionLevel" },
+            "level4": { "$ref": "#/$defs/sectionLevel" },
+            "level5": { "$ref": "#/$defs/sectionLevel" },
+            "level6": { "$ref": "#/$defs/sectionLevel" },
+            "appendix": {
+              "description": "Top-level headings after \\appendix (fields as for level1). Absent: the main numbering continues.",
+              "$ref": "#/$defs/sectionLevel"
+            }
+          }
+        },
+        "figures": { "$ref": "#/$defs/counterKind" },
+        "tables": { "$ref": "#/$defs/counterKind" },
+        "equations": { "$ref": "#/$defs/counterKind" },
+        "list_separator": { "description": "Between the items of a multi-label \\cref{a,b,c} (default ', ').", "type": "string" },
+        "list_conjunction": { "description": "Before the last item of a multi-label \\cref{a,b,c} (default ' and ').", "type": "string" }
+      }
+    },
+    "bibliography": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": { "type": "string", "enum": ["auto", "citeproc", "manual"] },
+        "prefer": {
+          "description": "Explicit precedence when both an inline thebibliography and external .bib sources exist.",
+          "type": "string",
+          "enum": ["external", "inline"]
+        },
+        "heading": { "description": "Unnumbered heading placed before generated bibliography entries; empty for none.", "type": "string" },
+        "csl": { "description": "CSL style file, relative to this profile file.", "type": "string", "minLength": 1 },
+        "manual": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "citation_format": { "description": "Citation text; {numbers} is the joined entry numbers.", "type": "string" },
+            "number_separator": { "type": "string" },
+            "entry_label": { "description": "Label written before each manual entry; {n} is its number.", "type": "string" }
+          }
+        }
+      }
+    },
+    "pandoc": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "extra_args": { "type": "array", "items": { "type": "string", "pattern": "^--?[A-Za-z]" } }
+      }
+    },
+    "tex": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "accepted_commands": {
+          "description": "Commands Pandoc does not understand whose loss is expected for this profile; reported as info.",
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[A-Za-z@]+$" },
+          "uniqueItems": true
+        },
+        "accepted_environments": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[A-Za-z@*]+$" },
+          "uniqueItems": true
+        }
+      }
+    },
+    "reference_docx": {
+      "description": "Where the Pandoc reference document comes from: generated from this profile, or an external read-only publisher template.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": { "type": "string", "enum": ["generated", "external"] },
+        "path": { "description": "External reference .docx, relative to this profile file (external mode only).", "type": "string", "minLength": 1 }
+      }
+    },
+    "layout": {
+      "description": "Publisher-neutral page, column, typography and float layout.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "page": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "size": {
+              "oneOf": [
+                { "type": "string", "enum": ["letter", "legal", "a4", "a5"] },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["width", "height"],
+                  "properties": { "width": { "$ref": "#/$defs/length" }, "height": { "$ref": "#/$defs/length" } }
+                }
+              ]
+            },
+            "orientation": { "type": "string", "enum": ["portrait", "landscape"] },
+            "margins": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "top": { "$ref": "#/$defs/length" },
+                "bottom": { "$ref": "#/$defs/length" },
+                "left": { "$ref": "#/$defs/length" },
+                "right": { "$ref": "#/$defs/length" }
+              }
+            },
+            "header_distance": { "$ref": "#/$defs/length" },
+            "footer_distance": { "$ref": "#/$defs/length" }
+          }
+        },
+        "columns": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "frontmatter": { "type": "integer", "minimum": 1, "maximum": 6 },
+            "body": { "type": "integer", "minimum": 1, "maximum": 6 },
+            "gap": { "$ref": "#/$defs/length" }
+          }
+        },
+        "body_start": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "strategy": {
+              "description": "Where the body section begins; derived from the document structure, never from heading text.",
+              "type": "string",
+              "enum": ["first-numbered-heading", "first-heading"]
+            }
+          }
+        },
+        "paragraph": {
+          "description": "Defaults of running body paragraphs.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "line_spacing": { "type": "number", "exclusiveMinimum": 0, "maximum": 4 },
+            "line_height": { "description": "Fixed baseline-to-baseline distance (like TeX \\baselineskip); wins over line_spacing.", "$ref": "#/$defs/length" },
+            "line_rule": { "description": "at-least: the line grows for taller content (TeX semantics); exact: never grows.", "type": "string", "enum": ["at-least", "exact"] },
+            "before_pt": { "type": "number", "minimum": 0, "maximum": 144 },
+            "after_pt": { "type": "number", "minimum": 0, "maximum": 144 }
+          }
+        },
+        "typography": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "default": { "$ref": "#/$defs/textStyle" },
+            "body": { "$ref": "#/$defs/textStyle" },
+            "title": { "$ref": "#/$defs/textStyle" },
+            "subtitle": { "$ref": "#/$defs/textStyle" },
+            "author": { "$ref": "#/$defs/textStyle" },
+            "affiliation": { "$ref": "#/$defs/textStyle" },
+            "email": { "$ref": "#/$defs/textStyle" },
+            "date": { "$ref": "#/$defs/textStyle" },
+            "abstract_title": { "$ref": "#/$defs/textStyle" },
+            "abstract": { "$ref": "#/$defs/textStyle" },
+            "abstract_label": { "$ref": "#/$defs/textStyle" },
+            "keywords": { "$ref": "#/$defs/textStyle" },
+            "keywords_label": { "$ref": "#/$defs/textStyle" },
+            "heading1": { "$ref": "#/$defs/textStyle" },
+            "heading2": { "$ref": "#/$defs/textStyle" },
+            "heading3": { "$ref": "#/$defs/textStyle" },
+            "figure_caption": { "$ref": "#/$defs/textStyle" },
+            "table_caption": { "$ref": "#/$defs/textStyle" },
+            "table_text": { "$ref": "#/$defs/textStyle" },
+            "bibliography": { "$ref": "#/$defs/textStyle" },
+            "equation": { "$ref": "#/$defs/textStyle" },
+            "equation_number": { "$ref": "#/$defs/textStyle" },
+            "centered": { "description": "Paragraphs of a center environment (default: centred, no first-line indent).", "$ref": "#/$defs/textStyle" },
+            "table_text_uncaptioned": { "description": "Cells of tables without a caption (e.g. lists of abbreviations); absent: table_text.", "$ref": "#/$defs/textStyle" },
+            "note": { "description": "Note blocks of figures and tables (style Caption Note); unset properties follow the source declarations (size, alignment, skip before, the size's single-spaced line height).", "$ref": "#/$defs/textStyle" },
+            "toc1": { "description": "Entries of level 1 in Word tables of contents (built-in style toc 1); absent: Word defaults.", "$ref": "#/$defs/textStyle" },
+            "toc2": { "description": "Entries of level 2 in Word tables of contents (built-in style toc 2); absent: Word defaults.", "$ref": "#/$defs/textStyle" },
+            "toc3": { "description": "Entries of level 3 in Word tables of contents (built-in style toc 3); absent: Word defaults.", "$ref": "#/$defs/textStyle" },
+            "toc4": { "description": "Entries of level 4 in Word tables of contents (built-in style toc 4); absent: Word defaults.", "$ref": "#/$defs/textStyle" },
+            "toc5": { "description": "Entries of level 5 in Word tables of contents (built-in style toc 5); absent: Word defaults.", "$ref": "#/$defs/textStyle" },
+            "toc6": { "description": "Entries of level 6 in Word tables of contents (built-in style toc 6); absent: Word defaults.", "$ref": "#/$defs/textStyle" },
+            "toc7": { "description": "Entries of level 7 in Word tables of contents (built-in style toc 7); absent: Word defaults.", "$ref": "#/$defs/textStyle" },
+            "toc8": { "description": "Entries of level 8 in Word tables of contents (built-in style toc 8); absent: Word defaults.", "$ref": "#/$defs/textStyle" },
+            "toc9": { "description": "Entries of level 9 in Word tables of contents (built-in style toc 9); absent: Word defaults.", "$ref": "#/$defs/textStyle" }
+          }
+        },
+        "equations": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "alignment": { "type": "string", "enum": ["center", "left"] },
+            "number_alignment": { "type": "string", "enum": ["right", "left"] },
+            "mode": {
+              "description": "table: borderless three-cell table (equation centred, number at the side); tabs: centre and right tab stops.",
+              "type": "string",
+              "enum": ["table", "tabs"]
+            },
+            "number_width": {
+              "description": "Width reserved for the equation number; an equal spacer is reserved on the opposite side so the equation stays centred.",
+              "$ref": "#/$defs/length"
+            }
+          }
+        },
+        "figures": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "columnwidth_basis": { "description": "What \\columnwidth measures.", "type": "string", "enum": ["column"] },
+            "textwidth_basis": {
+              "description": "What \\textwidth measures: the page text area, or the current column.",
+              "type": "string",
+              "enum": ["page-text", "column"]
+            },
+            "alignment": { "type": "string", "enum": ["left", "center", "right"] },
+            "caption_placement": { "type": "string", "enum": ["above", "below"] },
+            "allow_overflow": { "description": "Allow a figure to be wider than the content width of its column.", "type": "boolean" }
+          }
+        },
+        "tables": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "alignment": { "type": "string", "enum": ["left", "center", "right"] },
+            "width": { "description": "auto keeps the content-driven width; column fits the column exactly; or a length.", "oneOf": [{ "type": "string", "enum": ["auto", "column"] }, { "$ref": "#/$defs/length" }] },
+            "layout": { "type": "string", "enum": ["autofit", "fixed"] },
+            "cell_margins": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "top": { "$ref": "#/$defs/length" },
+                "bottom": { "$ref": "#/$defs/length" },
+                "left": { "$ref": "#/$defs/length" },
+                "right": { "$ref": "#/$defs/length" }
+              }
+            },
+            "header_emphasis": { "type": "string", "enum": ["bold", "none"] },
+            "borders": { "type": "string", "enum": ["none", "rules", "grid"] },
+            "keep_rows": { "description": "Keep each row on one page and keep the table with its caption.", "type": "boolean" },
+            "caption_placement": { "type": "string", "enum": ["above", "below"] },
+            "min_font_pt": { "description": "Smallest table font the layout may use; never shrunk below it.", "type": "number", "exclusiveMinimum": 0 }
+          }
+        },
+        "contents": {
+          "description": "Word tables of contents and lists generated from the source.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "list_level": { "description": "TOC level (style toc N) of list-of-figures/tables and custom-list entries; 1 shares the style of chapter entries.", "type": "integer", "minimum": 1, "maximum": 9 }
+          }
+        },
+        "font_sizes": {
+          "description": "Point sizes of the LaTeX relative size commands (tiny ... Huge); absent: the standard LaTeX sizes for the default font size.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "tiny": {"type": "number", "exclusiveMinimum": 0}, "scriptsize": {"type": "number", "exclusiveMinimum": 0}, "footnotesize": {"type": "number", "exclusiveMinimum": 0}, "small": {"type": "number", "exclusiveMinimum": 0}, "normalsize": {"type": "number", "exclusiveMinimum": 0}, "large": {"type": "number", "exclusiveMinimum": 0}, "Large": {"type": "number", "exclusiveMinimum": 0}, "LARGE": {"type": "number", "exclusiveMinimum": 0}, "huge": {"type": "number", "exclusiveMinimum": 0}, "Huge": {"type": "number", "exclusiveMinimum": 0} }
+        },
+        "pagination": {
+          "description": "Word sections and page numbers. \\pagenumbering{...} / \\setcounter{page}{n} in the source start new sections when follow_source is true.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "page_numbers": {
+              "description": "Where the PAGE field goes; none writes no header/footer.",
+              "type": "string",
+              "enum": ["none", "footer-center", "footer-left", "footer-right", "header-center", "header-left", "header-right"]
+            },
+            "follow_source": { "description": "Honour \\pagenumbering and \\setcounter{page} of the source (each \\pagenumbering restarts at 1, as in LaTeX).", "type": "boolean" },
+            "format": { "description": "Number format of the document start, before any \\pagenumbering.", "type": "string", "enum": ["decimal", "lowerRoman", "upperRoman", "lowerLetter", "upperLetter", "none"] },
+            "start": { "description": "First page number of the document start.", "type": "integer", "minimum": 0 },
+            "suppress_first_page": { "description": "No page number on the first page of the first numbered section.", "type": "boolean" }
+          }
+        }
+      }
+    },
+    "frontmatter": {
+      "description": "Front-matter extraction (metadata adapter) and rendering strategy.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "metadata_adapter": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+        "author_block": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "layout": { "description": "stacked: one block of paragraphs per author; columns: a borderless table, authors side by side.", "type": "string", "enum": ["stacked", "columns"] },
+            "max_columns": { "type": "integer", "minimum": 1, "maximum": 8 },
+            "show_affiliation": { "type": "boolean" },
+            "show_email": { "type": "boolean" }
+          }
+        },
+        "abstract": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "layout": { "description": "heading: label as its own paragraph; run-in: label opens the first abstract paragraph.", "type": "string", "enum": ["heading", "run-in"] },
+            "label": { "type": "string" },
+            "separator": { "type": "string" }
+          }
+        },
+        "keywords": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "layout": { "type": "string", "enum": ["heading", "run-in"] },
+            "label": { "type": "string" },
+            "separator": { "type": "string" },
+            "environments": { "description": "LaTeX environments whose body is the keyword list.", "type": "array", "items": { "type": "string", "pattern": "^[A-Za-z@*]+$" }, "uniqueItems": true },
+            "commands": { "description": "LaTeX commands whose argument is the keyword list.", "type": "array", "items": { "type": "string", "pattern": "^[A-Za-z@]+$" }, "uniqueItems": true }
+          }
+        },
+        "date": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "show": { "type": "boolean" } }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "length": {
+      "description": "A physical length: a string such as 0.75in (units in, pt, cm, mm) or {value, unit}.",
+      "oneOf": [
+        { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?(in|pt|cm|mm)$" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["value", "unit"],
+          "properties": { "value": { "type": "number", "minimum": 0 }, "unit": { "type": "string", "enum": ["in", "pt", "cm", "mm"] } }
+        }
+      ]
+    },
+    "textStyle": {
+      "description": "Character and paragraph properties of one Word style.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "font": { "type": "string", "minLength": 1 },
+        "size_pt": { "type": "number", "minimum": 4, "maximum": 96 },
+        "bold": { "type": "boolean" },
+        "italic": { "type": "boolean" },
+        "color": { "type": "string", "pattern": "^([0-9A-Fa-f]{6}|auto)$" },
+        "caps": { "description": "Display-only capitalisation; the stored text is never changed.", "type": "string", "enum": ["none", "all", "small"] },
+        "alignment": { "type": "string", "enum": ["left", "center", "right", "justify"] },
+        "before_pt": { "type": "number", "minimum": 0, "maximum": 144 },
+        "after_pt": { "type": "number", "minimum": 0, "maximum": 144 },
+        "line_spacing": { "description": "Line spacing as a multiple of single spacing.", "type": "number", "exclusiveMinimum": 0, "maximum": 4 },
+        "line_height": { "description": "Fixed baseline-to-baseline distance (like TeX \\baselineskip); wins over line_spacing.", "$ref": "#/$defs/length" },
+        "line_rule": { "description": "at-least: the line grows for taller content (TeX semantics); exact: never grows.", "type": "string", "enum": ["at-least", "exact"] },
+        "keep_next": { "type": "boolean" },
+        "keep_lines": { "type": "boolean" },
+        "widow_control": { "type": "boolean" },
+        "page_break_before": { "description": "Start every paragraph of this style on a new page (e.g. chapters of a report).", "type": "boolean" },
+        "right_tab_leader": { "description": "A right-aligned tab stop at the text width with this leader (page numbers of contents entries).", "type": "string", "enum": ["none", "dot", "hyphen", "underscore", "middleDot"] },
+        "indent_left": { "$ref": "#/$defs/length" },
+        "indent_first_line": { "$ref": "#/$defs/length" },
+        "indent_hanging": { "$ref": "#/$defs/length" }
+      }
+    },
+    "numeral": { "type": "string", "enum": ["arabic", "Roman", "roman", "Alpha", "alpha"] },
+    "sectionLevel": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "numeral": { "$ref": "#/$defs/numeral" },
+        "format": { "description": "Number as written before the heading text.", "type": "string", "minLength": 1 },
+        "ref": { "description": "Text of \\ref{...} to this level.", "type": "string", "minLength": 1 },
+        "reference": { "description": "Text of \\autoref/\\cref to this level.", "type": "string", "minLength": 1 }
+      }
+    },
+    "counterKind": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "numeral": { "$ref": "#/$defs/numeral" },
+        "format": { "description": "Label written at the target (caption prefix or equation number).", "type": "string", "minLength": 1 },
+        "separator": { "description": "Between the label and the caption text; a newline becomes a line break.", "type": "string" },
+        "ref": { "description": "Text of \\ref{...}.", "type": "string", "minLength": 1 },
+        "reference": { "description": "Text of \\eqref, \\autoref and \\cref.", "type": "string", "minLength": 1 },
+        "reset": { "description": "Restart the counter at every numbered heading of this level.", "type": "string", "enum": ["none", "section", "subsection"] }
+      }
+    }
+  }
+}

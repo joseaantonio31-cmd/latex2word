@@ -1,0 +1,129 @@
+# Generic academic profile: semantics (numbering, cross-references, bibliography
+# policy) plus a neutral single-column article layout. It carries no publisher
+# layout and no document-class knowledge; publisher profiles extend it and
+# override individual keys.
+profile_schema_version: 1
+id: generic
+display_name: Generic academic article
+
+required_tools:
+  - pandoc
+  - latex
+  - dvisvgm
+optional_tools:
+  - pdflatex
+  - inkscape
+  - rsvg-convert
+  - pdftocairo
+
+numbering:
+  sections:
+    enabled: true
+    separator: " "
+    level1: {numeral: arabic, format: "{n}",             ref: "{n}",             reference: "Section {n}"}
+    level2: {numeral: arabic, format: "{n1}.{n}",        ref: "{n1}.{n}",        reference: "Section {n1}.{n}"}
+    level3: {numeral: arabic, format: "{n1}.{n2}.{n}",   ref: "{n1}.{n2}.{n}",   reference: "Section {n1}.{n2}.{n}"}
+  figures:
+    enabled: true
+    numeral: arabic
+    format: "Figure {n}"
+    separator: ": "
+    ref: "{n}"
+    reference: "Figure {n}"
+    reset: none
+  tables:
+    enabled: true
+    numeral: arabic
+    format: "Table {n}"
+    separator: ": "
+    ref: "{n}"
+    reference: "Table {n}"
+    reset: none
+  equations:
+    enabled: true
+    numeral: arabic
+    format: "({n})"
+    separator: " "
+    ref: "{n}"
+    reference: "({n})"
+    reset: none
+
+bibliography:
+  mode: auto
+  heading: "References"
+  manual:
+    citation_format: "[{numbers}]"
+    number_separator: ", "
+    entry_label: "[{n}]"
+
+pandoc:
+  extra_args: []
+
+tex:
+  accepted_commands: []
+  accepted_environments: []
+
+# Publisher-neutral page layout and front matter. A publisher profile overrides
+# individual keys; nothing below names a publisher or a document class.
+reference_docx:
+  mode: generated
+
+layout:
+  page:
+    size: letter
+    orientation: portrait
+    margins: {top: 1in, bottom: 1in, left: 1in, right: 1in}
+    header_distance: 0.5in
+    footer_distance: 0.5in
+  columns: {frontmatter: 1, body: 1, gap: 0.25in}
+  body_start: {strategy: first-numbered-heading}
+  paragraph: {line_spacing: 1.0, before_pt: 0, after_pt: 6}
+  typography:
+    default: {font: Times New Roman, size_pt: 11}
+    body: {alignment: justify}
+    title: {size_pt: 20, bold: true, alignment: center, before_pt: 0, after_pt: 12}
+    subtitle: {size_pt: 14, alignment: center, after_pt: 12}
+    author: {size_pt: 12, alignment: center, before_pt: 0, after_pt: 2}
+    affiliation: {size_pt: 10, italic: true, alignment: center, before_pt: 0, after_pt: 2}
+    email: {size_pt: 10, alignment: center, before_pt: 0, after_pt: 2}
+    date: {size_pt: 11, alignment: center, after_pt: 12}
+    abstract_title: {size_pt: 11, bold: true, alignment: center, before_pt: 6, after_pt: 3, keep_next: true}
+    abstract: {size_pt: 10, alignment: justify, before_pt: 0, after_pt: 6}
+    abstract_label: {bold: true}
+    keywords: {size_pt: 10, alignment: justify, before_pt: 0, after_pt: 6}
+    keywords_label: {bold: true}
+    heading1: {size_pt: 14, bold: true, alignment: left, before_pt: 12, after_pt: 6, keep_next: true, keep_lines: true}
+    heading2: {size_pt: 12, bold: true, alignment: left, before_pt: 10, after_pt: 4, keep_next: true, keep_lines: true}
+    heading3: {size_pt: 11, bold: true, italic: true, alignment: left, before_pt: 8, after_pt: 3, keep_next: true, keep_lines: true}
+    figure_caption: {size_pt: 10, alignment: center, before_pt: 4, after_pt: 10}
+    table_caption: {size_pt: 10, alignment: center, before_pt: 10, after_pt: 4, keep_next: true}
+    table_text: {size_pt: 10, alignment: left, before_pt: 1, after_pt: 1}
+    bibliography: {size_pt: 10, alignment: left, before_pt: 0, after_pt: 3, indent_left: 0.3in, indent_hanging: 0.3in}
+    equation: {alignment: center, before_pt: 6, after_pt: 6}
+    equation_number: {alignment: right}
+  equations: {alignment: center, number_alignment: right, mode: table, number_width: 0.5in}
+  figures: {columnwidth_basis: column, textwidth_basis: page-text, alignment: center, caption_placement: below, allow_overflow: false}
+  tables:
+    alignment: center
+    width: auto
+    layout: autofit
+    cell_margins: {top: 0.02in, bottom: 0.02in, left: 0.075in, right: 0.075in}
+    header_emphasis: bold
+    borders: rules
+    keep_rows: true
+    caption_placement: above
+  # Word sections and PAGE fields. \pagenumbering{...} in the source starts a new section (restarting
+  # at 1, as LaTeX does) when follow_source is true; page_numbers places the PAGE field.
+  pagination:
+    page_numbers: none
+    follow_source: true
+    format: decimal
+    start: 1
+    suppress_first_page: false
+
+frontmatter:
+  metadata_adapter: generic
+  author_block: {layout: stacked, max_columns: 3, show_affiliation: true, show_email: true}
+  abstract: {layout: heading, label: Abstract, separator: ""}
+  keywords: {layout: run-in, label: Keywords, separator: ": ", environments: [keywords], commands: [keywords]}
+  date: {show: true}

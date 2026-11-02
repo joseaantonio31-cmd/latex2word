@@ -1,0 +1,80 @@
+\documentclass[12pt]{report}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage{longtable,booktabs}
+\begin{document}
+\pagenumbering{gobble}
+\null
+\thispagestyle{empty}
+\clearpage
+\begin{titlepage}
+\begin{center}
+UNIVERSIDAD DE EJEMPLO
+
+\vspace{0.75cm}
+
+{\Large\bfseries
+TÍTULO LARGO DEL TRABAJO
+}
+
+\vspace{0.75cm}
+
+TRABAJO DE PRUEBA
+\end{center}
+\end{titlepage}
+\clearpage
+\addcontentsline{toc}{chapter}{Página de firmas}
+\begin{center}
+    {\Large\scshape Página de firmas}
+\end{center}
+
+Aprobado por:
+
+\vspace{2cm}
+
+\hrulefill\\
+Persona Uno\\
+Cargo
+
+\vspace{\baselineskip}
+
+\clearpage
+\pagenumbering{roman}
+\chapter*{Resumen}
+\addcontentsline{toc}{chapter}{Resumen}
+Texto del resumen.
+
+\vspace{1em}
+
+Palabras clave: prueba.
+\tableofcontents
+\clearpage
+\addcontentsline{toc}{chapter}{Índice de cuadros}
+\listoftables
+\chapter*{Lista de siglas}
+\addcontentsline{toc}{chapter}{Lista de siglas}
+\begin{longtable}{ll}
+\toprule
+Sigla & Significado\\
+\midrule
+ABC & Una sigla de prueba\\
+\bottomrule
+\end{longtable}
+\clearpage
+\pagenumbering{arabic}
+\chapter{Primero}
+\section{Alfa}
+Texto.
+
+{\small Nota del cuerpo principal.}
+
+\vspace{1cm}
+
+Texto final.
+\begin{table}[h]
+\caption{Tabla con título}
+\begin{tabular}{ll}
+a & b\\
+\end{tabular}
+\end{table}
+\end{document}

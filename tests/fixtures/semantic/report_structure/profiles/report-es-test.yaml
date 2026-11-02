@@ -1,0 +1,28 @@
+# Test profile for a Spanish report-class document: chapters, four numbered heading levels,
+# per-chapter counters, lettered appendices, list conjunction and chapter page breaks.
+profile_schema_version: 1
+id: report-es-test
+extends: generic
+display_name: Report (es) test profile
+
+numbering:
+  sections:
+    separator: " "
+    level1: {numeral: arabic, format: "Capítulo {n}.", ref: "{n}", reference: "capítulo {n}"}
+    level2: {numeral: arabic, format: "{n1}.{n}", ref: "{n1}.{n}", reference: "sección {n1}.{n}"}
+    level3: {numeral: arabic, format: "{n1}.{n2}.{n}", ref: "{n1}.{n2}.{n}", reference: "sección {n1}.{n2}.{n}"}
+    level4: {numeral: arabic, format: "{n1}.{n2}.{n3}.{n}", ref: "{n1}.{n2}.{n3}.{n}", reference: "sección {n1}.{n2}.{n3}.{n}"}
+    appendix: {numeral: Alpha, format: "Anexo {n}.", ref: "{n}", reference: "anexo {n}"}
+  figures: {format: "Figura {n1}.{n}", separator: ". ", ref: "{n1}.{n}", reference: "figura {n1}.{n}", reset: section}
+  tables: {format: "Cuadro {n1}.{n}", separator: ". ", ref: "{n1}.{n}", reference: "cuadro {n1}.{n}", reset: section}
+  equations: {format: "({n1}.{n})", ref: "{n1}.{n}", reference: "ecuación ({n1}.{n})", reset: section}
+  list_separator: ", "
+  list_conjunction: " y "
+
+bibliography:
+  mode: auto
+  heading: "Referencias"
+
+layout:
+  typography:
+    heading1: {size_pt: 14, bold: true, alignment: center, keep_next: true, page_break_before: true}

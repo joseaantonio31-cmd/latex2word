@@ -1,0 +1,86 @@
+# IEEE Conference profile: the first real integration profile. It extends the
+# generic profile and overrides numbering semantics, page geometry, columns,
+# typography and the front-matter strategy. All geometry is data: the generic
+# engine contains no IEEE rule. It is selected explicitly by configuration,
+# never inferred from a document class.
+profile_schema_version: 1
+id: ieee-conference
+extends: generic
+display_name: IEEE Conference
+
+numbering:
+  sections:
+    level1: {numeral: Roman, format: "{n}.", ref: "{n}",           reference: "Section {n}"}
+    level2: {numeral: Alpha, format: "{n}.", ref: "{n1}-{n}",      reference: "Section {n1}-{n}"}
+    level3: {numeral: arabic, format: "{n})", ref: "{n1}-{n2}{n}", reference: "Section {n1}-{n2}{n}"}
+  figures:
+    format: "Fig. {n}."
+    separator: " "
+    reference: "Fig. {n}"
+  tables:
+    numeral: Roman
+    format: "TABLE {n}"
+    separator: "\n"
+    reference: "Table {n}"
+  equations:
+    format: "({n})"
+    reference: "({n})"
+
+tex:
+  accepted_commands:
+    - IEEEpeerreviewmaketitle
+    - IEEEoverridecommandlockouts
+    - IEEEpubid
+    - IEEEpubidadjcol
+    - IEEEspecialpapernotice
+
+layout:
+  page:
+    size: letter
+    orientation: portrait
+    margins: {top: 0.75in, bottom: 1in, left: 0.625in, right: 0.625in}
+    header_distance: 0.5in
+    footer_distance: 0.5in
+  columns: {frontmatter: 1, body: 2, gap: 0.25in}
+  body_start: {strategy: first-numbered-heading}
+  paragraph: {line_spacing: 1.0, before_pt: 0, after_pt: 0}
+  typography:
+    default: {font: Times New Roman, size_pt: 10}
+    body: {alignment: justify, before_pt: 0, after_pt: 0, indent_first_line: 10pt, widow_control: true}
+    title: {size_pt: 24, bold: false, alignment: center, before_pt: 0, after_pt: 10}
+    author: {size_pt: 10, bold: false, alignment: center, before_pt: 0, after_pt: 2}
+    affiliation: {size_pt: 8.5, italic: true, alignment: center, before_pt: 0, after_pt: 0}
+    email: {size_pt: 8.5, italic: false, alignment: center, before_pt: 0, after_pt: 0}
+    abstract_title: {size_pt: 9, bold: true, alignment: center, before_pt: 6, after_pt: 0}
+    abstract: {size_pt: 9, bold: true, alignment: justify, before_pt: 8, after_pt: 0, indent_first_line: 10pt, keep_next: false, keep_lines: false}
+    abstract_label: {bold: true, italic: true}
+    keywords: {size_pt: 9, bold: true, alignment: justify, before_pt: 0, after_pt: 6, indent_first_line: 10pt}
+    keywords_label: {bold: true, italic: true}
+    heading1: {size_pt: 10, bold: false, italic: false, caps: small, alignment: center, before_pt: 12, after_pt: 6, keep_next: true, keep_lines: true}
+    heading2: {size_pt: 10, bold: false, italic: true, caps: none, alignment: left, before_pt: 6, after_pt: 3, keep_next: true, keep_lines: true}
+    heading3: {size_pt: 10, bold: false, italic: true, caps: none, alignment: left, indent_left: 10pt, before_pt: 4, after_pt: 2, keep_next: true, keep_lines: true}
+    figure_caption: {size_pt: 8, bold: false, italic: false, alignment: center, before_pt: 3, after_pt: 8}
+    table_caption: {size_pt: 8, bold: false, italic: false, caps: small, alignment: center, before_pt: 8, after_pt: 3, keep_next: true}
+    table_text: {size_pt: 8, alignment: left, before_pt: 1, after_pt: 1}
+    bibliography: {size_pt: 8, alignment: justify, before_pt: 0, after_pt: 2, indent_left: 0.3in, indent_hanging: 0.3in}
+    equation: {alignment: center, before_pt: 4, after_pt: 4}
+    equation_number: {size_pt: 10, alignment: right}
+  equations: {alignment: center, number_alignment: right, mode: table, number_width: 0.35in}
+  figures: {columnwidth_basis: column, textwidth_basis: page-text, alignment: center, caption_placement: below, allow_overflow: false}
+  tables:
+    alignment: center
+    width: column
+    layout: fixed
+    cell_margins: {top: 0.01in, bottom: 0.01in, left: 0.04in, right: 0.04in}
+    header_emphasis: none
+    borders: rules
+    keep_rows: true
+    caption_placement: above
+    min_font_pt: 7
+
+frontmatter:
+  metadata_adapter: ieee-author-blocks
+  author_block: {layout: columns, max_columns: 4, show_affiliation: true, show_email: true}
+  abstract: {layout: run-in, label: Abstract, separator: "\u2014"}
+  keywords: {layout: run-in, label: Index Terms, separator: "\u2014", environments: [IEEEkeywords], commands: []}
+  date: {show: false}

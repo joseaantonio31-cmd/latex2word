@@ -1,0 +1,21 @@
+schema_version: 1
+
+project:
+  name: example
+  root: .          # relative to this file, not to the current directory
+  main: main.tex   # relative to the project root; need not exist for `config validate`
+
+profile: ieee-conference
+
+tools:
+  timeout_s: 120
+
+workspace:
+  root: .latex2word
+  keep_on_failure: true
+
+output:
+  directory: output
+
+validation:
+  fail_on: error

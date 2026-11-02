@@ -1,0 +1,26 @@
+# A custom profile living outside the package: same engine, different semantics.
+profile_schema_version: 1
+id: alt-numbering
+extends: generic
+display_name: Alternate numbering (fixture)
+
+numbering:
+  sections:
+    separator: " - "
+    level1: {numeral: Roman, format: "{n}.", ref: "{n}", reference: "Part {n}"}
+    level2: {numeral: Alpha, format: "{n1}{n}", ref: "{n1}{n}", reference: "Part {n1}{n}"}
+  figures:
+    numeral: Alpha
+    format: "Plate {n}"
+    separator: " | "
+    reference: "Plate {n}"
+  tables:
+    numeral: Roman
+    format: "TABLE {n}"
+    separator: " -- "
+    reference: "Tbl. {n}"
+  equations:
+    numeral: roman
+    format: "[{n}]"
+    ref: "{n}"
+    reference: "[{n}]"

@@ -1,0 +1,186 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:latex2word:schema:project:1",
+  "title": "latex2word project configuration, schema version 1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "project", "profile"],
+  "properties": {
+    "schema_version": {
+      "description": "Configuration schema version. Only 1 is supported.",
+      "type": "integer",
+      "enum": [1]
+    },
+    "project": {
+      "description": "The LaTeX project to convert. Treated as read-only.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "main"],
+      "properties": {
+        "name": {
+          "description": "Human-readable project name.",
+          "type": "string",
+          "minLength": 1
+        },
+        "root": {
+          "description": "Project root directory, relative to the directory of this configuration file. Default: '.'.",
+          "type": "string",
+          "minLength": 1
+        },
+        "main": {
+          "description": "Main .tex file, relative to the project root; must stay inside it.",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "profile": {
+      "description": "Identifier of the conversion profile (lowercase letters, digits, hyphens).",
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+    },
+    "profile_dirs": {
+      "description": "Extra directories searched for '<profile>.yaml' before the built-in profiles; relative to this configuration file.",
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "bibliography": {
+      "description": "Bibliography settings; each key overrides the resolved profile.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": { "type": "string", "enum": ["auto", "citeproc", "manual"] },
+        "prefer": { "type": "string", "enum": ["external", "inline"] },
+        "files": {
+          "description": "Bibliography files relative to the project root (must stay inside it); replaces the files named by the source.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true,
+          "minItems": 1
+        },
+        "csl": {
+          "description": "CSL style file; relative to this configuration file, or absolute.",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "tools": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "timeout_s": {
+          "description": "Timeout in seconds for each external command. Default: 120.",
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      }
+    },
+    "workspace": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "root": {
+          "description": "Workspace directory, relative to the project root. Default: '.latex2word'.",
+          "type": "string",
+          "minLength": 1
+        },
+        "keep_on_failure": {
+          "description": "Keep the workspace when a run fails. Default: true.",
+          "type": "boolean"
+        }
+      }
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "directory": {
+          "description": "Output directory, relative to the project root. Default: 'output'.",
+          "type": "string",
+          "minLength": 1
+        },
+        "filename": {
+          "description": "Output DOCX file name inside the output directory. Default: '<main file stem>.docx'.",
+          "type": "string",
+          "pattern": "^[^/\\\\:*?\"<>|]+\\.docx$"
+        }
+      }
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "fail_on": {
+          "description": "Lowest finding severity that fails a run. Default: 'error'.",
+          "type": "string",
+          "enum": ["error", "warning"]
+        }
+      }
+    },
+    "tex": {
+      "description": "Explicit user decisions about LaTeX constructs the converter does not understand. By default an unknown command that carries text is an error (its text would be lost); listing it here accepts that loss for this project.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "allow_commands": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[A-Za-z@]+$" },
+          "uniqueItems": true
+        },
+        "allow_environments": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[A-Za-z@*]+$" },
+          "uniqueItems": true
+        }
+      }
+    },
+    "staging": {
+      "description": "Optional extra files to stage besides the reachable source dependencies.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "extra_files": {
+          "description": "Files relative to the project root (must exist and stay inside it); staged byte-for-byte.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        }
+      }
+    },
+    "figures": {
+      "description": "Optional figure rendering hooks.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "render_preamble": {
+          "description": "Extra LaTeX lines appended to the derived TikZ/circuitikz render preamble.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "patches": {
+          "description": "Project-specific literal replacements applied to extracted TikZ source before rendering.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["figure", "find", "replace"],
+            "properties": {
+              "figure": { "description": "Figure id the patch applies to.", "type": "string", "minLength": 1 },
+              "find": { "type": "string", "minLength": 1 },
+              "replace": { "type": "string" }
+            }
+          }
+        },
+        "pdf_backends": {
+          "description": "PDF to SVG backend candidates in order of preference.",
+          "type": "array",
+          "items": { "type": "string", "enum": ["pdftocairo", "dvisvgm", "inkscape"] },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      }
+    }
+  }
+}

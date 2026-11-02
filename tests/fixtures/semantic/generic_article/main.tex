@@ -1,0 +1,88 @@
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{booktabs}
+
+\title{Generic Article Fixture}
+\begin{document}
+\maketitle
+
+\begin{abstract}
+A short abstract for the generic fixture.
+\end{abstract}
+
+\section{Introduction}\label{sec:intro}
+Prior work \cite{alpha} and \citep{beta,gamma} motivates the method in
+Section~\ref{sec:method} and the setup in Section~\ref{sec:setup}. The
+alignment is shown in Eq.~\eqref{eq:aligned} and the energy relation in
+\eqref{eq:energy}. Figure~\ref{fig:one} and Fig.~\ref{fig:two} show the data,
+and Table~\ref{tab:one} lists the parameters; \autoref{tab:two} lists more.
+
+\section{Method}\label{sec:method}
+\subsection{Setup}\label{sec:setup}
+Each record is modelled by
+\begin{equation}
+\begin{aligned}
+  a &= b + c \\
+  &\quad - d \& e
+\end{aligned}
+\label{eq:aligned}
+\end{equation}
+and the energy follows
+\begin{equation}
+  E = mc^2 \label{eq:energy}
+\end{equation}
+as usual.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.5\columnwidth]{figures/one.svg}
+  \caption{The first example.}
+  \label{fig:one}
+\end{figure}
+
+\subsection{Analysis}
+\begin{table}[t]
+  \caption{Parameters of the first run.}
+  \label{tab:one}
+  \centering
+  \begin{tabular}{lc}
+    \toprule
+    Name & Value \\
+    \midrule
+    Alpha & 1 \\
+    Beta & 2 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{Results}
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.5\linewidth]{figures/two.svg}
+  \caption{The second example.}
+  \label{fig:two}
+\end{figure}
+
+\begin{table}[t]
+  \caption{Parameters of the second run.}
+  \label{tab:two}
+  \centering
+  \begin{tabular}{lc}
+    \toprule
+    Name & Value \\
+    \midrule
+    Gamma & 3 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section*{Data Availability}
+The data are available on request.
+
+\section*{Supplementary Material}
+None.
+
+\bibliographystyle{plain}
+\bibliography{refs}
+\end{document}

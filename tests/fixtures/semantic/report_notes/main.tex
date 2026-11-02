@@ -1,0 +1,63 @@
+\documentclass[12pt]{report}
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx,booktabs,longtable}
+% a note macro of the usual shape: a skip, then one paragraph-level group with declarations
+\newcommand{\remark}[1]{%
+    \par\medskip
+    {\raggedright\footnotesize\textit{Remark.} #1\par}%
+}
+% a macro that is not a note (no paragraph-level group)
+\newcommand{\strong}[1]{\textbf{#1}}
+\begin{document}
+\chapter{First}
+Opening paragraph of the running text. It is ordinary prose and must keep the body style, the body size and
+the body indentation, whatever happens to the notes of the floats below.
+
+{\small A size group in running prose stays ordinary body text.\par}
+
+\remark{A remark in running prose is not attached to a float and stays body text.}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=3cm]{pic.png}
+\caption{Synthetic figure}
+\label{fig:one}
+\remark{First synthetic note below a figure. It is long enough to wrap over several lines of the page, so
+that the line height and the indentation of the following lines can be checked; it goes on with more words
+to be safe and wraps again at least once more before it ends with \strong{a bold word}.}
+\end{figure}
+
+Text after the figure refers to figure~\ref{fig:one}.
+
+\begin{table}[h]
+\centering
+\caption{Synthetic table}
+\begin{tabular}{ll}
+\toprule
+A & B\\
+\midrule
+x & y\\
+\bottomrule
+\end{tabular}
+\remark{Second synthetic note, after a tabular inside a table float.}
+\end{table}
+
+\begin{longtable}{ll}
+\toprule
+C & D\\
+\midrule
+u & v\\
+\bottomrule
+\end{longtable}
+\remark{Third synthetic note, right after a long table.}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=3cm]{pic.png}
+\caption{Figure with a literal note group}
+\medskip
+{\centering\scriptsize Literal note group with other declarations.\par}
+\end{figure}
+
+Closing paragraph of the running text.
+\end{document}

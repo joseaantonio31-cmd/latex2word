@@ -1,0 +1,16 @@
+# Test profile: a report with indented, justified body text on an 18 pt baseline and compact captions, so
+# that note blocks (smaller, ragged, unindented in the source) differ visibly from the body.
+profile_schema_version: 1
+id: report-notes-test
+extends: generic
+display_name: Report note blocks test profile
+
+layout:
+  paragraph: {line_height: 18pt, line_rule: at-least, before_pt: 0, after_pt: 0}
+  typography:
+    default: {font: Times New Roman, size_pt: 12}
+    body: {alignment: justify, indent_first_line: 36pt}
+    heading1: {size_pt: 14, bold: true, keep_next: true}
+    figure_caption: {size_pt: 10, before_pt: 4, after_pt: 10, line_height: 12pt}
+    table_caption: {size_pt: 10, before_pt: 10, after_pt: 4, keep_next: true, line_height: 12pt}
+    table_text: {size_pt: 10, line_height: 14pt}

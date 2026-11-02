@@ -1,0 +1,26 @@
+# Test profile: Spanish report front matter with page numbering, styled contents entries and a separate
+# role for uncaptioned (list) tables.
+profile_schema_version: 1
+id: report-frontmatter-test
+extends: generic
+display_name: Report front matter test profile
+
+numbering:
+  sections:
+    separator: " "
+    level1: {numeral: arabic, format: "Capítulo {n}.", ref: "{n}", reference: "capítulo {n}"}
+    level2: {numeral: arabic, format: "{n1}.{n}", ref: "{n1}.{n}", reference: "sección {n1}.{n}"}
+  tables: {format: "Cuadro {n1}.{n}", separator: ". ", ref: "{n1}.{n}", reference: "cuadro {n1}.{n}", reset: section}
+
+layout:
+  paragraph: {line_spacing: 1.5, line_height: 18pt, line_rule: at-least, before_pt: 0, after_pt: 0}
+  typography:
+    default: {font: Times New Roman, size_pt: 12}
+    heading1: {size_pt: 14, bold: true, alignment: center, keep_next: true, page_break_before: true}
+    table_text: {size_pt: 10, line_height: 14pt}
+    table_text_uncaptioned: {size_pt: 12, line_height: 18pt}
+    toc1: {bold: true, before_pt: 12, after_pt: 0, line_height: 18pt, right_tab_leader: dot}
+    toc2: {before_pt: 5, after_pt: 0, line_height: 18pt, indent_left: 18pt, right_tab_leader: dot}
+    toc5: {before_pt: 0, after_pt: 0, line_height: 18pt, indent_left: 44.5pt, indent_hanging: 27pt, right_tab_leader: dot}
+  contents: {list_level: 5}
+  pagination: {page_numbers: footer-center, follow_source: true}
