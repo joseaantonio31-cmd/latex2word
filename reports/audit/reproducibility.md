@@ -14,10 +14,11 @@ upstream binary was refused by the session permission policy), TeX, dvisvgm, rsv
 | `2d37916` | F-01..F-04 fixes, regression tests, oracle, clean fixture, harness |
 | `a61debb` | F-05 fix |
 | `258af10` | reports |
-| (follow-up commit) | fixes from the independent review + report updates |
+| `dd0b39b` | fixes from the independent review + report updates |
 
-No original fixture was modified. New fixtures live in `tests/fixtures/audit/`. The only change to an existing test
-is the marked assertion in `tests/test_source_graph.py` (F-02).
+No original fixture was modified. New fixtures live in `tests/fixtures/audit/`. Two existing tests were changed,
+each marked with an audit comment: `tests/test_source_graph.py` (dynamic paths are now errors, F-02) and
+`tests/test_local_packages.py` (local `.sty` file reads are now followed and contained, F-02 follow-up).
 
 ## Commands
 
