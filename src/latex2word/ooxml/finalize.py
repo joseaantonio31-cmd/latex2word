@@ -7,7 +7,7 @@ failed finalisation leaves a previous destination file byte-for-byte intact.
 
 Transform order (each is generic and driven by the resolved layout/profile data):
 styles -> body start -> front matter -> bibliography -> caption placement -> figure extents -> table layout ->
-equation layout -> section properties -> core properties.
+equation layout -> section properties -> core properties -> build-path custom properties.
 """
 
 from __future__ import annotations
@@ -25,6 +25,7 @@ from latex2word.layout import FrontmatterConfig, ResolvedLayout
 from latex2word.logging_utils import log_event
 from latex2word.metadata.model import DocumentMetadata
 from latex2word.ooxml.bibliography import apply_bibliography_layout
+from latex2word.ooxml.custom_properties import remove_build_path_properties
 from latex2word.ooxml.drawings import FigureSpec, apply_caption_placement, apply_figure_extents
 from latex2word.ooxml.equations import apply_equation_layout
 from latex2word.ooxml.fields import field_instructions, keep_line_breaks_unstretched, request_field_update
@@ -118,6 +119,7 @@ def finalize_docx(
         size_styles = apply_size_styles(styles, document, dict(layout.font_sizes))
         caption_notes = apply_caption_notes(document, styles, layout)
         apply_core_properties(package, context.metadata)
+        removed_properties = remove_build_path_properties(package)
         keep_line_breaks_unstretched(package)
         toc_fields = [i for i in field_instructions(document) if i.split()[:1] == ["TOC"]]
         if toc_fields:
@@ -139,6 +141,7 @@ def finalize_docx(
             "image_grids": image_grids,
             "caption_notes": caption_notes,
             "styles": describe_styles(styles, used),
+            "removed_custom_properties": removed_properties,
         }
         data = package.to_bytes()
     except (BuildError, ValueError, KeyError) as exc:
