@@ -7,6 +7,9 @@ figures, references and document structure.
 > its configuration format may still change, and no licence has been chosen yet: all rights reserved by the
 > owner until a licence is added. Output must be reviewed in Microsoft Word.
 
+> **Trust boundary.** latex2word currently assumes trusted LaTeX input. Do not use it to process untrusted or
+> third-party LaTeX projects. See [SECURITY.md](SECURITY.md) for what is and is not enforced.
+
 ## Why
 
 Journals, institutions and collaborators often require `.docx`. Generic converters flatten LaTeX: equations become
@@ -15,10 +18,14 @@ latex2word treats the LaTeX project as the source of truth and produces a Word d
 editing: native Word equations, real Word tables, vector figures, working internal links and Word-native contents
 lists.
 
-It is a careful pipeline around Pandoc, not a TeX engine. Constructs it cannot convert faithfully are reported as
-diagnostics, never silently dropped. It has been validated end to end on a 160+ page engineering report with
-hundreds of equations, dozens of figures and tables, and an academic front matter, using Microsoft Word as the
-renderer.
+It is a careful pipeline around Pandoc, not a TeX engine. latex2word is designed to fail loudly on unsupported
+constructs: it probes for commands Pandoc would drop, applies structural validation to the result (for example a
+per-occurrence check that every source cross-reference reached the document, and that no alignment marker leaked into
+an equation), and refuses to write output when a check fails. These checks cover the failure modes that are known
+and tested; they cannot prove that every possible TeX construct is converted. The maintainer has validated the tool
+end to end on a 160+ page engineering report with hundreds of equations, dozens of figures and tables, and an
+academic front matter, using Microsoft Word as the renderer; that document is private and not part of the
+repository's tests.
 
 ## Features
 
@@ -43,13 +50,15 @@ renderer.
 - **Figure and table notes**: note blocks attached to floats keep their source formatting as a Word style.
 - **Profiles**: page geometry, columns, typography and numbering live in YAML profiles (`generic`,
   `ieee-conference`, or your own), never in the engine.
-- **Safety**: the LaTeX project is never modified; all work happens in an owned, staged copy; output is replaced
-  atomically only after validation.
+- **Safety (trusted input)**: the LaTeX project is never modified; all work happens in an owned, staged copy; the
+  output can never replace a build input or a non-DOCX file; it is replaced atomically only after validation. These
+  are safety properties for trusted projects, not a sandbox (see [SECURITY.md](SECURITY.md)).
 
 ## Requirements
 
 - Python 3.11 or later (developed with 3.14) and the Python packages `PyYAML`, `jsonschema`, `lxml`.
-- External tools (found on `PATH`, never installed by latex2word): Pandoc 3.x (3.12 certified, 3.13 tested), a TeX
+- External tools (found on `PATH`, never installed by latex2word): Pandoc 3.12 (certified; other 3.x versions are
+  probed at every build and refused when their LaTeX reader differs from the pinned facts, e.g. 3.1.3), a TeX
   distribution (`latex`) and `dvisvgm`. Optional: `pdftocairo`,
   Inkscape, `rsvg-convert`.
 - Microsoft Word to view and review the result (Word is the authoritative renderer).
@@ -104,12 +113,14 @@ a `visual_review.md` checklist for the Word review.
 
 ## Known limitations (summary)
 
-- Bibliography formatting follows the CSL style, which can differ from a biblatex style.
+- Bibliography formatting follows the CSL style, which can differ from a biblatex style; a declared style
+  (`style=apa`, `\bibliographystyle{…}`) without a matching CSL is reported as a warning.
 - Figure, table and equation numbers and cross-reference texts are literal text with working hyperlinks, not Word
   `SEQ`/`REF` fields.
 - Very wide equations can render differently because Word's math metrics differ from TeX's.
 - Not every macro or package can be reproduced semantically; unknown constructs that would lose text are errors.
 - Microsoft Word is the authoritative renderer; final layout must be reviewed there.
+- latex2word assumes trusted LaTeX input (see [SECURITY.md](SECURITY.md)).
 
 See [docs/known-limitations.md](docs/known-limitations.md).
 
@@ -120,5 +131,7 @@ python -m pytest                    # unit and synthetic end-to-end tests (Pando
 python -m pytest -m integration     # optional: real toolchain and external reference projects (env-configured)
 ```
 
-All selected tests pass; the integration tests are deselected by default and need an external project and a local
-expectations file (see [docs/development.md](docs/development.md)).
+The suite is meant to pass completely only with the certified toolchain (Pandoc 3.12; the figure tests also need TeX
+and dvisvgm). With another Pandoc, the build tests stop at the compatibility check by design. The integration tests are
+deselected by default and need an external project and a local expectations file (see
+[docs/development.md](docs/development.md)).

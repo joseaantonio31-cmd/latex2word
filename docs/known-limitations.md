@@ -2,6 +2,13 @@
 
 latex2word is an experimental private preview. The limitations below are known and deliberate or not yet solved.
 
+## Security
+
+- **latex2word currently assumes trusted LaTeX input. Do not use it to process untrusted or third-party LaTeX
+  projects.** Pandoc's LaTeX reader can still be made to read a file outside the project by two known constructs
+  (`\iffalse` nesting, `filecontents`), and TeX may read any readable file while rendering a TikZ figure. Details and
+  the planned structural fixes: [SECURITY.md](../SECURITY.md).
+
 ## Rendering
 
 - **Microsoft Word is the authoritative renderer.** latex2word validates the DOCX structurally, but line breaks,
@@ -15,7 +22,11 @@ latex2word is an experimental private preview. The limitations below are known a
 ## Semantics
 
 - **Bibliography formatting follows the CSL style**, which can differ from a biblatex style (fields such as notes,
-  places or access dates, title capitalisation).
+  places or access dates, title capitalisation). No CSL file ships with latex2word: a declared style such as
+  `style=apa` without a configured CSL uses Pandoc's default (Chicago author-date) and is reported as
+  `L2W-W-BIB-014`; a CSL of another style as `L2W-W-BIB-015`; a style with no known CSL equivalent as `L2W-W-BIB-016`.
+- **Multiple numbered rows in one `align`/`gather`** are an explicit error (`L2W-E-MATH-003`): use `\nonumber` on all
+  rows but one, or one environment per numbered equation.
 - **Numbers and cross-reference texts are literal text** with working internal hyperlinks, not Word `SEQ`/`REF`
   fields; inserting a figure in Word does not renumber the others.
 - **Not every macro can be reproduced semantically.** Macros are expanded by Pandoc; layout-oriented commands are
@@ -28,5 +39,8 @@ latex2word is an experimental private preview. The limitations below are known a
 
 ## Toolchain
 
-- Pandoc 3.12 is the certified version; 3.13 is tested and works but reports `TESTED_UNCERTIFIED`.
+- Pandoc 3.12 is the certified version; 3.13 is reported by the maintainer to work as `TESTED_UNCERTIFIED` (not
+  verified in the repository's own test evidence). Every build probes Pandoc: a reader whose AST differs from the
+  pinned facts is refused (`L2W-E-PANDOC-003`); a probe that cannot run is a tool error (`L2W-E-PANDOC-004`), not a
+  verdict on the version.
 - Validated mainly on Windows 11 with MiKTeX; Linux/WSL is a design target without regular validation.
