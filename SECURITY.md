@@ -76,9 +76,17 @@ from the distribution trees, and it does nothing for `dvisvgm`. It could be a de
 **Planned isolation (not implemented; needs local testing on each platform).** Run `latex` and `dvisvgm` in an
 OS-level restricted process whose file-system view contains only the render directory (read-write), the staged
 project (read-only) and the TeX distribution (read-only), with no network. Possible mechanisms: a container or
-bubblewrap/landlock on Linux, `sandbox-exec` profiles on macOS, an AppContainer or low-integrity job object on
-Windows. Each needs platform-specific tests with a real TeX installation, which the cloud audit environment does
-not have.
+bubblewrap/landlock on Linux, `sandbox-exec` profiles on macOS, an AppContainer on Windows. A low-integrity token
+or a job object is not one: neither restricts reads.
+
+**Windows prototype (not in the build).** An AppContainer without capabilities was tested locally with MiKTeX and
+`dvisvgm` on Windows 11 Home, without administrator rights: with read access granted only to the TeX distribution,
+the staged project and the render directory, `\openin`, `\input`, an indirectly built path and a pgfplots table read
+of an outside canary were all refused (each read the canary without isolation), and TikZ, circuitikz and pgfplots
+figures with external data rendered to byte-identical SVGs. It is not enabled because it needs further work: MiKTeX
+has to be granted read access to its installation and its registry settings (a setup step that changes the user's
+machine), its on-the-fly package installation and format updates cannot run inside the container, and the
+mechanism is not yet integrated or tested on other TeX distributions and platforms.
 
 ## Reporting a problem
 
