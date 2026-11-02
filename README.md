@@ -26,10 +26,17 @@ It is a careful pipeline around Pandoc, not a TeX engine. latex2word is designed
 constructs: it probes for commands Pandoc would drop, applies structural validation to the result (for example a
 per-occurrence check that every source cross-reference reached the document, and that no alignment marker leaked into
 an equation), and refuses to write output when a check fails. These checks cover the failure modes that are known
-and tested; they cannot prove that every possible TeX construct is converted. The maintainer has validated the tool
-end to end on a 160+ page engineering report with hundreds of equations, dozens of figures and tables, and an
-academic front matter, using Microsoft Word as the renderer; that document is private and not part of the
-repository's tests.
+and tested; they cannot prove that every possible TeX construct is converted.
+
+## Validation
+
+- **Test suite**: synthetic fixtures only; `python -m pytest` passes completely on Windows 11 with Pandoc 3.12 and
+  3.13 (counts in [docs/development.md](docs/development.md)).
+- **End to end**: the maintainer has validated the current version on a private 163-page engineering report, rendered by
+  Microsoft Word: 163 Word pages, 1,405 native equations (54 display), 21 captioned figures and 2 logos, 31
+  captioned tables, 47 figure/table notes, 74 bibliography entries, 486/486 cross-references resolved, roman/arabic
+  page-number sections and Word contents fields; the LaTeX sources stay byte-identical. That document is not part of
+  the repository.
 
 ## Features
 
@@ -61,10 +68,10 @@ repository's tests.
 ## Requirements
 
 - Python 3.11 or later (developed with 3.14) and the Python packages `PyYAML`, `jsonschema`, `lxml`.
-- External tools (found on `PATH`, never installed by latex2word): Pandoc 3.12 (certified; other 3.x versions are
-  probed at every build and refused when their LaTeX reader differs from the pinned facts, e.g. 3.1.3), a TeX
-  distribution (`latex`) and `dvisvgm`. Optional: `pdftocairo`,
-  Inkscape, `rsvg-convert`.
+- External tools (found on `PATH`, never installed by latex2word): Pandoc 3.12 (certified), a TeX distribution
+  (`latex`) and `dvisvgm`. Optional: `pdftocairo`, Inkscape, `rsvg-convert`. Pandoc 3.13 passes the same tests but
+  is reported as `TESTED_UNCERTIFIED`; every build probes the Pandoc in use and refuses one whose LaTeX reader
+  differs from the pinned facts (e.g. 3.1.3).
 - Microsoft Word to view and review the result (Word is the authoritative renderer).
 
 Details: [docs/dependencies.md](docs/dependencies.md). Platforms: developed and validated on Windows 11; Linux/WSL
@@ -107,6 +114,7 @@ a `visual_review.md` checklist for the Word review.
 
 | Document | Content |
 |---|---|
+| [SECURITY.md](SECURITY.md) | trust boundary: what is and is not enforced |
 | [docs/architecture.md](docs/architecture.md) | pipeline and modules |
 | [docs/supported-latex.md](docs/supported-latex.md) | supported constructs and caveats |
 | [docs/known-limitations.md](docs/known-limitations.md) | known limitations |
@@ -114,6 +122,8 @@ a `visual_review.md` checklist for the Word review.
 | [docs/development.md](docs/development.md) | environment, tests, fixtures, workflow |
 | [docs/m4-layout.md](docs/m4-layout.md), [docs/equation-layout.md](docs/equation-layout.md), [docs/pandoc-ast-findings.md](docs/pandoc-ast-findings.md) | design notes |
 | [tools/README.md](tools/README.md) | manual verification helpers (Word rendering, PDF line metrics) |
+| [examples/minimal-project.yaml](examples/minimal-project.yaml) | a commented project file |
+| [reports/audit/](reports/audit/) | independent code audit: findings, fixes and remaining risks |
 
 ## Known limitations (summary)
 
@@ -124,7 +134,9 @@ a `visual_review.md` checklist for the Word review.
 - Very wide equations can render differently because Word's math metrics differ from TeX's.
 - Not every macro or package can be reproduced semantically; unknown constructs that would lose text are errors.
 - Microsoft Word is the authoritative renderer; final layout must be reviewed there.
-- latex2word assumes trusted LaTeX input (see [SECURITY.md](SECURITY.md)).
+- latex2word assumes trusted LaTeX input: Pandoc's reader can still be steered outside the project by a
+  `filecontents` construct (an opt-in confined reader closes this), and TeX can read any readable file while
+  rendering a figure. See [SECURITY.md](SECURITY.md).
 
 See [docs/known-limitations.md](docs/known-limitations.md).
 
@@ -135,7 +147,7 @@ python -m pytest                    # unit and synthetic end-to-end tests (Pando
 python -m pytest -m integration     # optional: real toolchain and external reference projects (env-configured)
 ```
 
-The suite is meant to pass completely only with the certified toolchain (Pandoc 3.12; the figure tests also need TeX
-and dvisvgm). With another Pandoc, the build tests stop at the compatibility check by design. The integration tests are
-deselected by default and need an external project and a local expectations file (see
+The suite passes completely with Pandoc 3.12 and 3.13; figure tests use fake tool runners and need no TeX. With a
+Pandoc that fails the compatibility probe, the build tests stop at the compatibility check by design. The integration
+tests are deselected by default and need an external project and a local expectations file (see
 [docs/development.md](docs/development.md)).

@@ -30,16 +30,19 @@ python -m pytest -m integration       # real toolchain + external reference proj
 
 ### Baseline
 
-`python -m pytest` on Windows 11 with Pandoc 3.13: **all selected tests pass** (1,129 passed, 2 skipped, 24
-deselected). The two skips are environment-specific (`test_platform_paths.py`: a case-sensitive file system, and the
-right to create file symlinks, neither available on a default Windows setup); the deselected tests are the
-integration tests below.
+`python -m pytest` on Windows 11, with Pandoc 3.12 and with Pandoc 3.13: **all selected tests pass** (1,256 passed,
+4 skipped, 24 deselected). The four skips are environment-specific: a case-sensitive file system
+(`test_platform_paths.py`) and the right to create symlinks (`test_platform_paths.py`, two in
+`test_output_safety.py`), neither available on a default Windows setup. The deselected tests are the integration
+tests below.
 
 ### Pandoc versions
 
 - **Certified: 3.12** (`pandoc_compat.CERTIFIED_VERSIONS`). The AST facts the filters rely on are pinned by
   `tests/test_pandoc_ast.py`; certifying another version means re-running that procedure, not editing the set.
-- **Tested but uncertified: 3.13.** Any version at or above the 3.0 minimum that is not certified is
+- **Tested but uncertified: 3.13.** It passes the full suite and the private end-to-end validation with the same
+  results as 3.12; certifying it is a deliberate decision, not a side effect. Any version at or above the 3.0 minimum
+  that is not certified is
   `TESTED_UNCERTIFIED`: `doctor` stays READY and reports warning `L2W-W-PANDOC-003`. Older versions, or a Pandoc that
   fails the capability probe, are `UNSUPPORTED` (`L2W-E-PANDOC-003`; `doctor` is NOT_READY).
 - `tests/test_pandoc_compat.py` checks these classes with synthetic version strings; tests that run the real Pandoc

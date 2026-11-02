@@ -5,8 +5,9 @@ latex2word is an experimental private preview. The limitations below are known a
 ## Security
 
 - **latex2word currently assumes trusted LaTeX input. Do not use it to process untrusted or third-party LaTeX
-  projects.** Pandoc's LaTeX reader can still be made to read a file outside the project by two known constructs
-  (`\iffalse` nesting, `filecontents`), and TeX may read any readable file while rendering a TikZ figure. Details and
+  projects.** With Pandoc 3.12/3.13, Pandoc's LaTeX reader can still be made to read a file outside the project
+  through `filecontents`; the opt-in confined reader (`LATEX2WORD_EXPERIMENTAL_CONFINED_READER=1`) closes this but is
+  not the default yet. TeX may read any readable file (`\input`, `\openin`) while rendering a TikZ figure. Details and
   the planned structural fixes: [SECURITY.md](../SECURITY.md).
 
 ## Rendering
@@ -33,14 +34,20 @@ latex2word is an experimental private preview. The limitations below are known a
   honoured only where a rewrite exists (front-matter sizes and spacing, notes, contents, pagination). Unknown
   constructs that would lose text are errors.
 - `\nameref`, `\pageref`, `\tag`, `\intertext`, sub-figures and EPS/TIFF graphics are not converted.
+- **TikZ figures see only the main file's preamble.** Each drawing is rendered as a standalone document whose
+  preamble is derived from the main file: drawing packages, TikZ/pgfplots settings, colours and the macros the drawing
+  uses. A macro, colour or style defined only in a local `.sty` (or another file the preamble loads) is not available:
+  the figure fails to render (`L2W-E-FIG-001`) instead of being converted wrongly. Define such commands in the main
+  preamble.
 - Contents lists use Word's own entry text: list entries show the caption text ("Table 2.1. …") rather than a
   separate number column, and spacing between chapter groups is not reproduced.
 - Spacing that LaTeX adds around floats and long tables (`\textfloatsep`, `\LTpost`) is not reproduced exactly.
 
 ## Toolchain
 
-- Pandoc 3.12 is the certified version; 3.13 is reported by the maintainer to work as `TESTED_UNCERTIFIED` (not
-  verified in the repository's own test evidence). Every build probes Pandoc: a reader whose AST differs from the
+- Pandoc 3.12 is the certified version. Pandoc 3.13 passes the full test suite and the private end-to-end validation
+  with the same results, but stays `TESTED_UNCERTIFIED` until it is certified deliberately (see
+  [development.md](development.md)). Every build probes Pandoc: a reader whose AST differs from the
   pinned facts is refused (`L2W-E-PANDOC-003`); a probe that cannot run is a tool error (`L2W-E-PANDOC-004`), not a
   verdict on the version.
 - Validated mainly on Windows 11 with MiKTeX; Linux/WSL is a design target without regular validation.

@@ -29,16 +29,17 @@ What latex2word does guarantee for trusted input:
 latex2word scans the project to decide what Pandoc may read; Pandoc's reader then interprets the same TeX by itself.
 The two interpretations differ: Pandoc expands macros and aliases, and it ends conditionals and `filecontents`
 differently from latex2word's scanner. Known constructs that made Pandoc read files from outside the project are now
-errors, but two scanner/reader disagreements still let a hostile document make Pandoc read an arbitrary file
-into the DOCX:
+errors, but scanner/reader disagreements remain:
 
-* `\iffalse … \ifx … \fi \input{/path} \fi` (conditional nesting);
-* `\input{/path}` inside a `filecontents` body.
+* `\input{/path}` inside a `filecontents` body makes Pandoc 3.12 and 3.13 read an arbitrary file into the DOCX;
+* `\iffalse … \ifx … \fi \input{/path} \fi` (conditional nesting) did the same with Pandoc 3.1.3; Pandoc 3.12 and
+  3.13 do not follow it.
 
 The structural fix is to give the reader only one flattened file of already validated content and to run it with
-`pandoc --sandbox`. A prototype exists behind `LATEX2WORD_EXPERIMENTAL_CONFINED_READER=1` (see
-`reports/audit/remediation-phase2.md`). It is not the production path until it has been certified with the
-supported Pandoc versions.
+`pandoc --sandbox`. It exists behind `LATEX2WORD_EXPERIMENTAL_CONFINED_READER=1` (see
+`reports/audit/remediation-phase2.md`). Local certification with Pandoc 3.12 and 3.13 found it blocks every known
+vector and produces the same documents as the production path on the validation projects; it stays opt-in until it is made the default in a
+separate, reviewed change.
 
 ### TeX for figures (audit F-07)
 
@@ -57,8 +58,9 @@ runs `latex -interaction=nonstopmode -halt-on-error -file-line-error -no-shell-e
 * write: `<figure>.dvi`, `.log`, `.aux` in the render directory;
 * nothing else: no network, no other directory.
 
-**Not enforced today.** With `-no-shell-escape` TeX cannot run programs. TeX Live's default `openin_any=a` still lets
-`\input{/any/file}` inside a drawing read any readable file and typeset it into the SVG. Setting
+**Not enforced today.** With `-no-shell-escape` TeX cannot run programs, but it can still read files: TeX Live's
+default `openin_any=a` lets `\input{/any/file}` or `\openin` inside a drawing read any readable file and typeset it
+into the SVG, and a canary test confirmed the same outside read with MiKTeX. Setting
 `openin_any=p` is not treated as the isolation mechanism: it is a TeX Live (kpathsea) setting that MiKTeX does not
 share, it is configuration that the environment or `texmf.cnf` can override, its "paranoid" rule still allows reads
 from the distribution trees, and it does nothing for `dvisvgm`. It could be a defence-in-depth layer, not the fix.

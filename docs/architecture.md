@@ -58,6 +58,14 @@ project.yaml + profile
   rewrite (e.g. inside a TikZ picture that becomes an SVG) are not checked.
 * **Output target** (audit F-06): see `output_safety.py`. The DOCX never replaces a build input or a non-DOCX file.
 
+## Experimental confined reader (opt-in)
+
+With `LATEX2WORD_EXPERIMENTAL_CONFINED_READER=1`, step 6 runs in two Pandoc processes (`confinement.py`): the staged,
+validated source graph is flattened into one file, read by `pandoc --sandbox -f latex -t json` (a refused read is
+`L2W-E-CONFINE-001`), every image in the JSON AST is checked to resolve inside the staging directory
+(`L2W-E-CONFINE-002`), and the unchanged writer run converts the AST to DOCX. It closes the reader leaks described in
+[SECURITY.md](../SECURITY.md) and is not the default yet.
+
 ## Profiles and configuration
 
 `config.py` loads and validates the project file (`schemas/project.schema.json`); `profiles.py` loads YAML profiles
