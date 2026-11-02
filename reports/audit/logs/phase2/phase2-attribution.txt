@@ -1,0 +1,11 @@
+Phase 2 suite, Pandoc 3.1.3, attribution from JUnit XML (one entry per failing/erroring test case)
+passed: 1074   skipped: 9
+UNIT TEST FAILURES (no Pandoc involved): 0 expected; see 'unexplained' below
+EXPECTED BUILD-GATE FAILURES (L2W-E-PANDOC-003: Pandoc 3.1.3 refused by design): 143
+PANDOC-3.1.3 AST FAILURES (tests calling Pandoc+filter directly; all already failing at baseline 35547d4): 25
+    10 tests/test_semantic_filter.py
+     4 tests/test_cli_build.py
+     4 tests/test_ooxml_styles.py
+     4 tests/test_pandoc_ast.py
+     3 tests/test_math_normalization.py
+ACTUAL REGRESSIONS / UNEXPLAINED: 0

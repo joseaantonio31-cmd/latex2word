@@ -8,8 +8,18 @@ import pytest
 from conftest import REPO_ROOT
 from projectkit import make_project
 
-from latex2word.bibliography import csl_identity, declared_styles, style_mismatch_findings
+from latex2word.bibliography import csl_identity, declared_styles
+from latex2word.bibliography import style_mismatch_findings as _mismatch
+from latex2word.profiles import load_profile
 from latex2word.source_graph import build_source_graph
+
+# the style table is profile data (generic.yaml, inherited by every built-in profile)
+TABLE = load_profile("generic", ()).bibliography["style_csl"]
+
+
+def style_mismatch_findings(graph, csl):
+    return _mismatch(graph, csl, TABLE)
+
 
 NUMERIC_CSL = REPO_ROOT / "tests" / "fixtures" / "semantic" / "csl" / "numeric.csl"
 
@@ -74,3 +84,13 @@ def test_bibstyle_option_and_commented_declarations(tmp_path: Path):
 
 def test_csl_identity_reads_id_title_short_and_stem(tmp_path: Path):
     assert csl_identity(_csl(tmp_path / "local-name.csl", "apa", "APA")) == {"local-name", "apa"}
+
+
+def test_without_a_profile_table_every_declared_style_is_unverifiable(tmp_path: Path):
+    g = graph(tmp_path, "\\usepackage[style=apa]{biblatex}")
+    assert codes(_mismatch(g, NUMERIC_CSL, None)) == ["L2W-W-BIB-016"]
+    assert codes(_mismatch(g, None, None)) == ["L2W-W-BIB-014"]
+
+
+def test_ieee_conference_profile_inherits_the_table():
+    assert load_profile("ieee-conference", ()).bibliography["style_csl"]["apa"] == ["apa"]

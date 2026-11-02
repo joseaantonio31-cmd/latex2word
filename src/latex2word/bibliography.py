@@ -275,7 +275,8 @@ def plan_bibliography(
     plan.mode = mode
 
     if mode == "citeproc":
-        _plan_citeproc(plan, graph, external, config, profile_csl, project_root, inline_envs)
+        _plan_citeproc(plan, graph, external, config, profile_csl, project_root, inline_envs,
+                       profile_bibliography.get("style_csl") or {})
     elif mode == "manual":
         _plan_manual(plan, graph, inline_envs)
     if plan.mode != "none":
@@ -291,6 +292,7 @@ def _plan_citeproc(
     profile_csl: Path | None,
     project_root: Path,
     inline_envs: list[tuple[str, Any]],
+    style_csl: Mapping[str, Any] | None = None,
 ) -> None:
     plan.files = external
     for rel in external:
@@ -316,7 +318,7 @@ def _plan_citeproc(
             Finding("L2W-I-BIB-007", Severity.INFO, "no CSL style configured; Pandoc's default citation style is used")
         )
     plan.csl = csl
-    plan.findings.extend(style_mismatch_findings(graph, csl if csl is not None and csl.is_file() else None))
+    plan.findings.extend(style_mismatch_findings(graph, csl if csl is not None and csl.is_file() else None, style_csl))
     # The staged copy lists the files explicitly: drop the source's own commands (one authority).
     seen: set[tuple[str, int]] = set()
     for edge in graph.edges:
@@ -408,18 +410,11 @@ def _check_keys(plan: BibliographyPlan) -> None:
 
 # ------------------------------------------------------------------ declared style vs CSL (audit F-11)
 
-# Explicit aliases only: a source style matches a CSL file when one of its aliases equals a token of the CSL's
-# <id> (last path segment), its file stem, or its <title-short>. No fuzzy matching: an unlisted style is
-# reported as "cannot be verified" rather than assumed equivalent.
-STYLE_ALIASES: dict[str, tuple[str, ...]] = {
-    "apa": ("apa",),
-    "ieee": ("ieee",), "ieeetr": ("ieee",), "ieeetran": ("ieee",),
-    "chicago-authordate": ("chicago-author-date",), "chicago-notes": ("chicago-note-bibliography", "chicago-fullnote-bibliography"),
-    "mla": ("modern-language-association", "mla"),
-    "nature": ("nature",),
-    "vancouver": ("vancouver",),
-    "acm": ("association-for-computing-machinery", "acm-sig-proceedings"),
-}
+# The style -> CSL table is profile data (``bibliography.style_csl`` in ``profiles/generic.yaml``): publisher and
+# style names belong in profiles, not in the engine. A source style matches a CSL file when one of the profile's
+# tokens for it equals a token of the CSL's <id> (last path segment), its file stem, or its <title-short>. No fuzzy
+# matching: a style without an entry is reported as "cannot be verified" rather than assumed equivalent.
+# Pandoc's own default style (used when no CSL is configured):
 PANDOC_DEFAULT_CSL = "chicago-author-date"
 
 
@@ -478,11 +473,12 @@ def csl_identity(csl: Path) -> set[str]:
     return tokens
 
 
-def style_mismatch_findings(graph: SourceGraph, csl: Path | None) -> list[Finding]:
+def style_mismatch_findings(graph: SourceGraph, csl: Path | None, style_csl: Mapping[str, Any] | None = None) -> list[Finding]:
     """Never imply that the CSL in use reproduces the bibliography style the source declares."""
+    table = {str(k).lower(): tuple(str(t).lower() for t in v) for k, v in (style_csl or {}).items()}
     findings: list[Finding] = []
     for style in declared_styles(graph):
-        aliases = STYLE_ALIASES.get(style.name.lower())
+        aliases = table.get(style.name.lower())
         if csl is None:
             if aliases and PANDOC_DEFAULT_CSL in aliases:
                 continue

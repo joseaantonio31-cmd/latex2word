@@ -51,6 +51,19 @@ numbering:
 bibliography:
   mode: auto
   heading: "References"
+  # Declared style -> tokens of an equivalent CSL style. Only used to warn when the configured CSL (or Pandoc's
+  # default) is not the style the source asks for (L2W-W-BIB-014/015/016); it does not select a CSL.
+  style_csl:
+    apa: [apa]
+    ieee: [ieee]
+    ieeetr: [ieee]
+    ieeetran: [ieee]
+    chicago-authordate: [chicago-author-date]
+    chicago-notes: [chicago-note-bibliography, chicago-fullnote-bibliography]
+    mla: [modern-language-association, mla]
+    nature: [nature]
+    vancouver: [vancouver]
+    acm: [association-for-computing-machinery, acm-sig-proceedings]
   manual:
     citation_format: "[{numbers}]"
     number_separator: ", "
