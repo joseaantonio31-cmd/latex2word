@@ -203,15 +203,29 @@ def apply_pagination(package: OpcPackage, document: etree._Element, pagination: 
             carrier.remove(mark)
         ensure_child(ppr(carrier), "sectPr", PPR_ORDER).extend(list(sect))
         outcome.sections.append({"format": previous.format, "start": previous.start})
-        following = carrier.getnext()
-        while following is not None and following.tag != w("p"):
-            following = following.getnext() if following.tag == w("bookmarkStart") else None
+        following = _next_paragraph(carrier)
         if following is not None:
             set_child(ppr(following), "pageBreakBefore", PPR_ORDER, val="0")
     suppress = pagination.suppress_first_page and not first_numbered_done and spec.format != "none"
     _write_numbering(final, spec, refs, first_page_empty=suppress)
     outcome.sections.append({"format": spec.format, "start": spec.start})
     return outcome
+
+
+def _next_paragraph(carrier: etree._Element) -> etree._Element | None:
+    """The paragraph that starts the page after a section break: the next ``w:p`` sibling of ``carrier``.
+
+    Bookmark boundaries are transparent (Pandoc 3.12 closes and opens section bookmarks at body level between the two
+    paragraphs: ``bookmarkEnd``, ``bookmarkStart``); any other element (a table, a ``sdt``...) is not a paragraph and
+    ends the search.
+    """
+    following = carrier.getnext()
+    while following is not None and following.tag in _BOOKMARK_BOUNDARIES:
+        following = following.getnext()
+    return following if following is not None and following.tag == w("p") else None
+
+
+_BOOKMARK_BOUNDARIES = frozenset({w("bookmarkStart"), w("bookmarkEnd")})
 
 
 def _drop_bookmark(mark: etree._Element) -> None:
