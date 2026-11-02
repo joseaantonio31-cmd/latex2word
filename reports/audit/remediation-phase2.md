@@ -254,7 +254,8 @@ not implemented.
 
 ## 14. Test evidence and remaining blockers
 
-**Suite on Pandoc 3.1.3** (`logs/phase2/phase2-attribution.txt`, JUnit `logs/phase2/phase2-junit.xml`):
+**Suite on Pandoc 3.1.3** (`logs/phase2/phase2-attribution.txt`, the per-test attribution of the run's JUnit output;
+the raw container JUnit file is not kept in the repository):
 
 | Category | Count |
 |---|---|
