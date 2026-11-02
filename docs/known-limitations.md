@@ -38,7 +38,8 @@ latex2word is an experimental private preview. The limitations below are known a
   preamble is derived from the main file: drawing packages, TikZ/pgfplots settings, colours and the macros the drawing
   uses. A macro, colour or style defined only in a local `.sty` (or another file the preamble loads) is not available:
   the figure fails to render (`L2W-E-FIG-001`) instead of being converted wrongly. Define such commands in the main
-  preamble.
+  preamble. This concerns TikZ, circuitikz and pgfplots drawings only: local `.sty` macros used in the text are
+  converted as usual.
 - Contents lists use Word's own entry text: list entries show the caption text ("Table 2.1. …") rather than a
   separate number column, and spacing between chapter groups is not reproduced.
 - Spacing that LaTeX adds around floats and long tables (`\textfloatsep`, `\LTpost`) is not reproduced exactly.
