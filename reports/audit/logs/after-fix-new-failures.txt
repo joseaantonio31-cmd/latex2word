@@ -1,0 +1,108 @@
+fixed-or-gone: ['FAILED tests/test_frontmatter_fidelity.py::test_builds_without_errors', 'FAILED tests/test_frontmatter_fidelity.py::test_clearpage_then_addcontentsline_then_list_gives_one_break_and_the_entry_on_the_new_page\n', 'FAILED tests/test_frontmatter_fidelity.py::test_contents_entry_styles_and_list_level\n', 'FAILED tests/test_frontmatter_fidelity.py::test_hrulefill_line_becomes_a_bordered_paragraph_and_the_text_follows\n', 'FAILED tests/test_frontmatter_fidelity.py::test_manual_toc_entries_are_tc_fields_and_gobble_pages_have_no_number\n', 'FAILED tests/test_frontmatter_fidelity.py::test_null_and_clearpage_at_the_start_give_a_blank_first_sheet\n', 'FAILED tests/test_frontmatter_fidelity.py::test_size_group_becomes_a_character_style_with_the_latex_size\n', 'FAILED tests/test_frontmatter_fidelity.py::test_starred_headings_and_list_titles_are_unlisted_and_numbered_ones_are_not\n', 'FAILED tests/test_frontmatter_fidelity.py::test_toc_styles_are_word_builtins_and_tc_paragraphs_keep_with_next\n', 'FAILED tests/test_frontmatter_fidelity.py::test_typesetting_rewrites_stop_where_the_main_matter_starts\n', 'FAILED tests/test_frontmatter_fidelity.py::test_uncaptioned_tables_take_their_own_role_and_captioned_tables_keep_table_text\n', 'FAILED tests/test_frontmatter_fidelity.py::test_vspace_becomes_spacer_paragraphs_and_dynamic_lengths_warn\n']
+newly failing (all due to the Pandoc gate, see findings F-05):
+  ERROR tests/test_frontmatter_fidelity.py::test_builds_without_errors
+  ERROR tests/test_frontmatter_fidelity.py::test_clearpage_then_addcontentsline_then_list_gives_one_break_and_the_entry_on_the_new_page
+
+  ERROR tests/test_frontmatter_fidelity.py::test_contents_entry_styles_and_list_level
+
+  ERROR tests/test_frontmatter_fidelity.py::test_hrulefill_line_becomes_a_bordered_paragraph_and_the_text_follows
+
+  ERROR tests/test_frontmatter_fidelity.py::test_manual_toc_entries_are_tc_fields_and_gobble_pages_have_no_number
+
+  ERROR tests/test_frontmatter_fidelity.py::test_null_and_clearpage_at_the_start_give_a_blank_first_sheet
+
+  ERROR tests/test_frontmatter_fidelity.py::test_size_group_becomes_a_character_style_with_the_latex_size
+
+  ERROR tests/test_frontmatter_fidelity.py::test_starred_headings_and_list_titles_are_unlisted_and_numbered_ones_are_not
+
+  ERROR tests/test_frontmatter_fidelity.py::test_toc_styles_are_word_builtins_and_tc_paragraphs_keep_with_next
+
+  ERROR tests/test_frontmatter_fidelity.py::test_typesetting_rewrites_stop_where_the_main_matter_starts
+
+  ERROR tests/test_frontmatter_fidelity.py::test_uncaptioned_tables_take_their_own_role_and_captioned_tables_keep_table_text
+
+  ERROR tests/test_frontmatter_fidelity.py::test_vspace_becomes_spacer_paragraphs_and_dynamic_lengths_warn
+
+  FAILED tests/test_build.py::test_a_missing_csl_file_fails_before_conversion
+
+  FAILED tests/test_build.py::test_builds_are_reproducible_part_by_part
+  FAILED tests/test_build.py::test_failed_build_keeps_the_workspace_unless_the_configuration_discards_it
+
+  FAILED tests/test_build.py::test_semantic_corruption_fails_the_build_without_writing_output[E = mc^2 \\label{eq:energy}-E \\begin{foo} a & b \\end{foo} \\label{eq:energy}-L2W-E-MATH-001]
+
+  FAILED tests/test_build.py::test_semantic_corruption_fails_the_build_without_writing_output[Section~\\ref{sec:method}-Section~\\ref{sec:nowhere}-L2W-E-REF-001]
+
+  FAILED tests/test_build.py::test_semantic_corruption_fails_the_build_without_writing_output[\\begin{aligned}-\\begin{aligned}\\intertext{x}-L2W-E-MATH-003]
+
+  FAILED tests/test_build.py::test_semantic_corruption_fails_the_build_without_writing_output[\\citep{beta,gamma}-\\citeauthor*{beta}\\mycite{beta}-L2W-E-CITE-002]
+
+  FAILED tests/test_build.py::test_semantic_corruption_fails_the_build_without_writing_output[\\citep{beta,gamma}-\\nameref{sec:method}-L2W-E-REF-006]
+
+  FAILED tests/test_build.py::test_semantic_corruption_fails_the_build_without_writing_output[\\cite{alpha}-\\cite{ghost}-L2W-E-CITE-001]
+
+  FAILED tests/test_build.py::test_semantic_corruption_fails_the_build_without_writing_output[\\label{fig:two}-\\label{fig:one}-L2W-E-LABEL-001]
+
+  FAILED tests/test_build.py::test_widths_pandoc_cannot_read_are_normalised_so_the_image_is_not_left_at_intrinsic_size
+
+  FAILED tests/test_build_layout.py::test_unknown_content_in_the_author_declaration_is_an_error_not_a_silent_loss
+
+  FAILED tests/test_corpus.py::test_corpus_case[author-marks-unsupported]
+  FAILED tests/test_corpus.py::test_corpus_case[author-thanks-custom-profile]
+
+  FAILED tests/test_corpus.py::test_corpus_case[author-thanks-generic]
+  FAILED tests/test_corpus.py::test_corpus_case[catcode]
+  FAILED tests/test_corpus.py::test_corpus_case[comment-escaped-content]
+  FAILED tests/test_corpus.py::test_corpus_case[conditional-structure]
+  FAILED tests/test_corpus.py::test_corpus_case[duplicate-label]
+  FAILED tests/test_corpus.py::test_corpus_case[dynamic-bibliography]
+  FAILED tests/test_corpus.py::test_corpus_case[dynamic-include]
+  FAILED tests/test_corpus.py::test_corpus_case[dynamic-input]
+  FAILED tests/test_corpus.py::test_corpus_case[figure-width-dimexpr]
+  FAILED tests/test_corpus.py::test_corpus_case[footnote]
+  FAILED tests/test_corpus.py::test_corpus_case[graphics-escape-project-root]
+
+  FAILED tests/test_corpus.py::test_corpus_case[href-and-url]
+  FAILED tests/test_corpus.py::test_corpus_case[immediate-write-file]
+  FAILED tests/test_corpus.py::test_corpus_case[include-missing-file]
+  FAILED tests/test_corpus.py::test_corpus_case[local-style-input-missing]
+  FAILED tests/test_corpus.py::test_corpus_case[local-style-unbalanced-braces]
+
+  FAILED tests/test_corpus.py::test_corpus_case[lstlisting-environment]
+  FAILED tests/test_corpus.py::test_corpus_case[macro-generated-figure-name]
+  FAILED tests/test_corpus.py::test_corpus_case[makeatletter]
+  FAILED tests/test_corpus.py::test_corpus_case[math-intertext]
+  FAILED tests/test_corpus.py::test_corpus_case[math-rcases]
+  FAILED tests/test_corpus.py::test_corpus_case[math-tag-complex]
+  FAILED tests/test_corpus.py::test_corpus_case[math-unknown-command]
+  FAILED tests/test_corpus.py::test_corpus_case[missing-figure]
+  FAILED tests/test_corpus.py::test_corpus_case[nameref]
+  FAILED tests/test_corpus.py::test_corpus_case[newcommand-math-macro]
+  FAILED tests/test_corpus.py::test_corpus_case[newcommand-text-macro]
+  FAILED tests/test_corpus.py::test_corpus_case[newcommand-wrapper-macro]
+  FAILED tests/test_corpus.py::test_corpus_case[newenvironment-definition]
+  FAILED tests/test_corpus.py::test_corpus_case[openin]
+  FAILED tests/test_corpus.py::test_corpus_case[pageref]
+  FAILED tests/test_corpus.py::test_corpus_case[raw-tex-conditional-text]
+  FAILED tests/test_corpus.py::test_corpus_case[resolved-citation]
+  FAILED tests/test_corpus.py::test_corpus_case[subfile]
+  FAILED tests/test_corpus.py::test_corpus_case[table-unbalanced-braces]
+  FAILED tests/test_corpus.py::test_corpus_case[table-wrong-column-count]
+  FAILED tests/test_corpus.py::test_corpus_case[undefined-reference]
+  FAILED tests/test_corpus.py::test_corpus_case[unknown-command-allowed-by-config]
+
+  FAILED tests/test_corpus.py::test_corpus_case[unknown-command-optional-argument]
+
+  FAILED tests/test_corpus.py::test_corpus_case[unknown-command-text]
+  FAILED tests/test_corpus.py::test_corpus_case[unknown-environment-with-text]
+
+  FAILED tests/test_corpus.py::test_corpus_case[unknown-wrapper-command]
+  FAILED tests/test_corpus.py::test_corpus_case[unresolved-citation]
+  FAILED tests/test_corpus.py::test_corpus_case[usepackage-unknown]
+  FAILED tests/test_corpus.py::test_corpus_case[verb-inline]
+  FAILED tests/test_corpus.py::test_corpus_case[verbatim-environment]
+  FAILED tests/test_corpus.py::test_corpus_case[write18-shell-escape]
+
+Attribution (JUnit XML of a re-run of exactly these test ids, 2026-11-02):
+ids=73 gate=73 other=0  -> every newly failing/erroring test fails on L2W-E-PANDOC-003 ("pandoc 3.1.3 is UNSUPPORTED"),
+i.e. on the compatibility gate of finding F-05 refusing the uncertified Pandoc of the audit container.
+They are expected to be unaffected on the certified Pandoc 3.12 (NOT VERIFIED here: BLOCKED, Pandoc 3.12 unavailable).

@@ -1,0 +1,26 @@
+# Audit environment (captured 2026-11-02T08:19:51Z)
+repo start commit: 35547d4c516c7bcfd65530686bd46b18e703c5ea (branch claude/eager-archimedes-0ka8gx == origin/main at start, clean tree)
+fix commit: 2d379163c489ee93fac07fb27b0e0a8dab2a2838
+Linux 6.18.44-fc-v185 x86_64
+Python 3.13.18
+lxml (6, 1, 3, 0) libxml2 (2, 14, 6)
+PyYAML 6.0.3
+jsonschema 4.26.0
+pytest 9.2.0
+lxml 6.1.3
+expat_2.9.0
+pandoc 3.1.3
+Features: -server +lua
+Scripting engine: Lua 5.4
+latex: ABSENT
+pdflatex: ABSENT
+lualatex: ABSENT
+dvisvgm: ABSENT
+kpsewhich: ABSENT
+rsvg-convert: ABSENT
+inkscape: ABSENT
+pdftocairo: /usr/bin/pdftocairo
+biber: ABSENT
+bibtex: ABSENT
+Microsoft Word: ABSENT (Linux container)
+Pandoc 3.12 (certified): ABSENT - installing the upstream binary was denied by the session permission policy

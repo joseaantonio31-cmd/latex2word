@@ -57,6 +57,7 @@ from latex2word.ooxml.style_ids import IMAGE_CAPTION, INDEX_TERMS, STYLE_NAMES, 
 from latex2word.ooxml.finalize import FinalizeContext, FinalizeResult, finalize_docx
 from latex2word.ooxml.validation import LayoutExpectations, LayoutValidation, validate_layout
 from latex2word.pandoc_adapter import PandocOptions, PandocRun, PandocTool, locate_pandoc, run_pandoc
+from latex2word.pandoc_compat import PandocCompat, assess_pandoc, compat_findings
 from latex2word.process import run_command
 from latex2word.profiles import Profile, load_profile
 from latex2word.reference_doc import ReferenceDoc, build_reference_docx
@@ -311,6 +312,14 @@ def run_build(
     result.profile_id = profile.id
     tool: PandocTool = locate_pandoc(which=which, runner=runner)
     note(f"profile {profile.id} ({' > '.join(profile.chain)}); pandoc {tool.version}")
+    # The same classification `doctor` reports. Without it a Pandoc whose reader AST differs from the pinned facts
+    # was used silently (Pandoc 3.1.3 drops numbered-equation wrappers and \Cref without any diagnostic).
+    assessment = assess_pandoc(tool.version, path=tool.path, runner=runner, timeout_s=config.tools.timeout_s, probe=True)
+    if assessment.compat is PandocCompat.UNSUPPORTED:
+        # a tool problem, not a document one: same contract as an unusable Pandoc in locate_pandoc (exit code 2)
+        finding = compat_findings(assessment)[0]
+        raise BuildError(f"{finding.message} [{finding.code}]")
+    result.findings.extend(f for f in compat_findings(assessment) if f.severity is not Severity.INFO)
 
     # 1-3: inspect, workspace, staging, figures (M2)
     note("inspecting, staging and rendering figures")

@@ -223,3 +223,58 @@ def test_f04_source_location_is_preferred_over_the_staged_one():
     source = LabelScan((), (LabelReference("x", "ref", SourceLocation("main.tex", 12)),))
     [finding] = _lost_references(staged, {"refs": []}, source)
     assert finding.location == SourceLocation("main.tex", 12)
+
+
+# ---------------------------------------------------------------- F-05: build ignored the Pandoc compatibility gate
+
+
+def _gate_project(tmp_path: Path):
+    import yaml
+
+    from latex2word.config import load_config
+
+    root = make_project(tmp_path, {"main.tex": "\\documentclass{article}\n\\begin{document}\nText.\n\\end{document}\n"})
+    data = {
+        "schema_version": 1,
+        "project": {"name": "gate", "root": str(root), "main": "main.tex"},
+        "profile": "generic",
+        "workspace": {"root": str(tmp_path / "ws")},
+        "output": {"directory": str(tmp_path / "out")},
+    }
+    (tmp_path / "c.yaml").write_text(yaml.safe_dump(data), encoding="utf-8")
+    return load_config(tmp_path / "c.yaml")
+
+
+@pytest.mark.parametrize(
+    ("compat", "code", "blocks"),
+    [("UNSUPPORTED", "L2W-E-PANDOC-003", True), ("TESTED_UNCERTIFIED", "L2W-W-PANDOC-003", False)],
+)
+def test_f05_build_applies_the_pandoc_classification_that_doctor_reports(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, compat: str, code: str, blocks: bool
+):
+    import latex2word.build as build_module
+    from latex2word.pandoc_adapter import PandocTool
+    from latex2word.pandoc_compat import PandocAssessment, PandocCompat
+
+    seen: dict[str, object] = {}
+
+    def assess(version, **kwargs):
+        seen.update(kwargs, version=version)
+        return PandocAssessment(PandocCompat[compat], version, (), ("reader AST differs",))
+
+    monkeypatch.setattr(build_module, "locate_pandoc", lambda **_: PandocTool("/fake/pandoc", "3.1.3", "pandoc 3.1.3"))
+    monkeypatch.setattr(build_module, "assess_pandoc", assess)
+    if not blocks:  # stop right after the gate: the rest of the pipeline is not under test here
+        monkeypatch.setattr(build_module, "run_figures", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("past gate")))
+    config = _gate_project(tmp_path)
+    if blocks:
+        from latex2word.errors import BuildError, ExitCode
+
+        with pytest.raises(BuildError, match=code) as raised:
+            build_module.run_build(config)
+        assert raised.value.exit_code is ExitCode.ERROR  # tool problem: exit code 2, like an unusable Pandoc
+        assert not (tmp_path / "ws").exists()  # stopped before any workspace was created
+    else:
+        with pytest.raises(RuntimeError, match="past gate"):
+            build_module.run_build(config)
+    assert seen["probe"] is True and seen["path"] == "/fake/pandoc" and seen["version"] == "3.1.3"
