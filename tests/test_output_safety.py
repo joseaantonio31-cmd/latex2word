@@ -148,6 +148,94 @@ def test_build_refuses_before_any_conversion_work(tmp_path: Path, project: Path,
     assert (project / "main.tex").read_bytes() == before and not (tmp_path / "ws").exists()
 
 
+# ------------------------------------------------------------------ the profile's Word template (reference_docx)
+
+
+class _ConversionStarted(Exception):
+    pass
+
+
+def _template(path: Path) -> Path:
+    """A real ZIP package: the not-a-DOCX rule (L2W-E-OUTPUT-003) cannot protect it, only its identity can."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(path, "w") as zf:
+        zf.writestr("[Content_Types].xml", "<Types/>")
+    return path
+
+
+def _build_with_template(tmp_path: Path, project: Path, monkeypatch: pytest.MonkeyPatch, profile_dir: Path,
+                         template_ref: str, output: Path):
+    """Run the build with a profile whose reference_docx is external; conversion start is a sentinel exception."""
+    import latex2word.build as build_module
+    from latex2word.config import load_config
+    from latex2word.pandoc_adapter import PandocTool
+    from latex2word.pandoc_compat import PandocAssessment, PandocCompat
+
+    monkeypatch.setattr(build_module, "locate_pandoc", lambda **_: PandocTool("/fake/pandoc", "3.12", "pandoc 3.12"))
+    monkeypatch.setattr(build_module, "assess_pandoc",
+                        lambda version, **_: PandocAssessment(PandocCompat.SUPPORTED, version, (), ()))
+
+    def started(*_a, **_k):
+        raise _ConversionStarted
+
+    monkeypatch.setattr(build_module, "run_figures", started)
+    profile_dir.mkdir(parents=True, exist_ok=True)
+    (profile_dir / "templated.yaml").write_text(yaml.safe_dump({
+        "profile_schema_version": 1, "id": "templated", "extends": "generic",
+        "reference_docx": {"mode": "external", "path": template_ref}}), encoding="utf-8")
+    data = {"schema_version": 1, "project": {"name": "p", "root": str(project), "main": "main.tex"},
+            "profile": "templated", "profile_dirs": [str(profile_dir)], "workspace": {"root": str(tmp_path / "ws")},
+            "output": {"directory": str(tmp_path / "out")}}
+    (tmp_path / "c.yaml").write_text(yaml.safe_dump(data), encoding="utf-8")
+    return build_module.run_build(load_config(tmp_path / "c.yaml"), output=output)
+
+
+def _refused(tmp_path, project, monkeypatch, profile_dir, template_ref, output, template) -> set[str]:
+    import latex2word.build as build_module
+
+    before = template.read_bytes()
+    with pytest.raises(build_module.OutputSafetyError) as raised:
+        _build_with_template(tmp_path, project, monkeypatch, profile_dir, template_ref, output)
+    assert template.read_bytes() == before and not (tmp_path / "ws").exists()
+    return {f.code for f in raised.value.findings}
+
+
+def test_external_reference_docx_is_never_a_valid_target(tmp_path: Path, project: Path, monkeypatch: pytest.MonkeyPatch):
+    template = _template(tmp_path / "profiles" / "template.docx")  # outside the project
+    codes_ = _refused(tmp_path, project, monkeypatch, tmp_path / "profiles", "template.docx", template, template)
+    assert codes_ == {"L2W-E-OUTPUT-002"}
+
+
+def test_project_local_reference_docx_is_never_a_valid_target(tmp_path: Path, project: Path, monkeypatch: pytest.MonkeyPatch):
+    template = _template(project / "templates" / "word.docx")
+    # the profile lives elsewhere and names the template relative to itself
+    ref = os.path.relpath(template, tmp_path / "profiles").replace(os.sep, "/")
+    codes_ = _refused(tmp_path, project, monkeypatch, tmp_path / "profiles", ref, template, template)
+    assert "L2W-E-OUTPUT-002" in codes_
+
+
+def test_alias_of_the_reference_docx_is_recognised(tmp_path: Path, project: Path, monkeypatch: pytest.MonkeyPatch):
+    template = _template(tmp_path / "shared" / "template.docx")
+    (tmp_path / "shared" / "sub").mkdir()
+    monkeypatch.chdir(tmp_path / "shared" / "sub")
+    # relative profile path, relative target with "..", and (where the file system folds case) a case variant
+    aliases = [Path("..") / "sub" / ".." / "template.docx"]
+    if os.path.exists(tmp_path / "shared" / "TEMPLATE.DOCX"):
+        aliases.append(tmp_path / "shared" / "TEMPLATE.DOCX")
+    for alias in aliases:
+        codes_ = _refused(tmp_path, project, monkeypatch, tmp_path / "profiles", "../shared/template.docx", alias, template)
+        assert codes_ == {"L2W-E-OUTPUT-002"}, alias
+
+
+def test_unrelated_output_passes_with_an_external_reference_docx(tmp_path: Path, project: Path, monkeypatch: pytest.MonkeyPatch):
+    template = _template(tmp_path / "profiles" / "template.docx")
+    before = template.read_bytes()
+    with pytest.raises(_ConversionStarted):  # the safety check passed and conversion began
+        _build_with_template(tmp_path, project, monkeypatch, tmp_path / "profiles", "template.docx",
+                             tmp_path / "out" / "result.docx")
+    assert template.read_bytes() == before
+
+
 def test_cli_exit_code_is_2_and_the_source_survives(tmp_path: Path, project: Path, monkeypatch: pytest.MonkeyPatch, capsys):
     import latex2word.build as build_module
     from latex2word.cli import main

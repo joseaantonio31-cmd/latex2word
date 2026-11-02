@@ -5,7 +5,8 @@ canonically, with every file the build reads:
 
 * every resolved node of the source graph (main file, ``\\input``/``\\include`` files, local
   ``.sty``/``.cls``, bibliography files, graphics, pgfplots data);
-* the configuration file, the configured CSL file and ``staging.extra_files``.
+* the configuration file, the configured CSL file, ``staging.extra_files`` and the profile's
+  external Word template (``reference_docx.path``, wherever it lies).
 
 Canonical comparison: absolute path, ``..`` collapsed, symlinks/junctions resolved
 (``os.path.realpath``), and letter case folded where the file system is case-insensitive

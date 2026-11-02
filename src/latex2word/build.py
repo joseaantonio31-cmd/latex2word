@@ -322,7 +322,7 @@ def run_build(
         raise BuildError(f"{finding.message} [{finding.code}]")
     result.findings.extend(f for f in compat_findings(assessment) if f.severity is not Severity.INFO)
     # F-06: refuse a dangerous output target before any conversion work starts
-    _assert_safe_output(config, output)
+    _assert_safe_output(config, output, profile)
 
     # 1-3: inspect, workspace, staging, figures (M2)
     note("inspecting, staging and rendering figures")
@@ -659,11 +659,14 @@ def _destination(config: ProjectConfig, output: Path | None) -> Path:
     return config.output.directory / (config.output.filename or f"{config.project.main.stem}.docx")
 
 
-def _assert_safe_output(config: ProjectConfig, output: Path | None) -> None:
+def _assert_safe_output(config: ProjectConfig, output: Path | None, profile: Profile) -> None:
     """Raise :class:`OutputSafetyError` unless the output target is safe (see ``output_safety``)."""
     graph = build_source_graph(config.project.root, config.project.main)
     root = config.project.root
     extra = [config.config_file, *[root / Path(*PurePosixPath(rel).parts) for rel in config.staging.extra_files]]
+    if profile.reference_docx_path is not None:
+        # an external Word template is a build input, and a valid DOCX: only identity protects it
+        extra.append(profile.reference_docx_path)
     if config.bibliography.csl is not None:
         extra.append(config.bibliography.csl)
     extra += [root / Path(*PurePosixPath(rel).parts) for rel in config.bibliography.files]
@@ -725,7 +728,7 @@ def _finish(
     output_sha: str | None = None
     if result.ok and deliverable is not None:
         destination = _destination(config, output)
-        _assert_safe_output(config, output)  # again, right before writing (the tree may have changed meanwhile)
+        _assert_safe_output(config, output, profile)  # again, right before writing (the tree may have changed meanwhile)
         destination = destination.resolve()
         _atomic_copy(deliverable, destination)
         result.output = destination
