@@ -100,10 +100,12 @@ def test_latex_runs_in_the_staged_main_directory_and_writes_into_the_render_dire
         timeout=10, which=fake_which({"latex", "dvisvgm"}), runner=runner, source_dir=source_dir,
     )
     assert result.ok, result.error
-    (latex_argv, latex_cwd), (_svg_argv, svg_cwd) = runner.calls
-    assert latex_cwd == source_dir and svg_cwd == workdir
+    (latex_argv, latex_cwd), (svg_argv, svg_cwd) = runner.calls
+    # dvisvgm resolves the DVI's relative graphic paths like LaTeX did: same directory
+    assert latex_cwd == source_dir and svg_cwd == source_dir
     assert "-output-directory=../../render/fig" in latex_argv
     assert latex_argv[-1] == "../../render/fig/fig.tex"
+    assert svg_argv[-1] == "../../render/fig/fig.dvi" and "--tmpdir=../../render/fig" in svg_argv
     assert not any(source_dir.iterdir())  # nothing written next to the staged sources
 
 

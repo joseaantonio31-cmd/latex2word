@@ -184,3 +184,29 @@ def test_resizebox_around_the_input_of_a_tikz_file_is_unwrapped_and_keeps_its_wi
     assert "\\includegraphics[width=1\\linewidth]{_l2w/figures/circ.svg}" in drawing
     assert [f.width.original for f in plan.figures if f.id == "circ"] == ["\\textwidth"]
 
+
+def test_drawing_with_an_embedded_graphic_is_replaced_once_as_a_whole(tmp_path: Path):
+    files = {
+        "main.tex": (
+            "\\documentclass{article}\\usepackage{tikz}\\begin{document}\n"
+            "\\begin{figure}\\begin{tikzpicture}\\node (b) {\\includegraphics[page=1, trim=1 2 3 4, clip,"
+            " width=.5\\textwidth]{figs/plot.pdf}};"
+            "\\draw (b.south) -- (b.north);\\end{tikzpicture}\\caption{Board}\\label{fig:b}\\end{figure}\n"
+            "\\includegraphics[width=\\columnwidth]{figs/photo.png}\n"
+            "\\end{document}\n"
+        ),
+        "figs/plot.pdf": PDF_BYTES,
+        "figs/photo.png": PNG_BYTES,
+    }
+    _, _, run = prepare(tmp_path, files)
+    # one figure for the drawing (the PDF inside it is not converted on its own) and one for the photo
+    assert [(o.record.id, o.renderer) for o in run.outcomes] == [("main", "latex-dvisvgm"), ("photo", "copy")]
+    plan = plan_figure_rewrites(run, "main.tex")
+    edits = drop_contained(plan.edits)
+    assert [e.kind for e in edits] == ["figure-tikz", "figure-width"]
+    assert edits[0].replacement == "\\includegraphics{_l2w/figures/main.svg}"
+    assert plan.assets == [("figures/main.svg", "_l2w/figures/main.svg")]
+    assert [(f.id, f.label) for f in plan.figures] == [("main", "fig:b"), ("photo", None)]
+    assert (run.workspace / "staging" / "figs" / "plot.pdf").is_file()  # staged for the drawing's render
+    # TeX applies page/trim/clip inside the drawing: no "not applied by the converter" warning for them
+    assert not [f for f in plan.findings if f.code == "L2W-W-FIG-004"]

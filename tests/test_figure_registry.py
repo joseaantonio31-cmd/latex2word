@@ -110,3 +110,48 @@ def test_ids_are_unique_and_stable_for_repeated_assets(tmp_path: Path):
 def test_unresolved_graphics_do_not_become_figures(tmp_path: Path):
     registry = discover(tmp_path, {"main.tex": "\\includegraphics{missing}"})
     assert registry.figures == []
+
+
+# ---- graphics inside a drawing -------------------------------------------------------------------
+
+
+def test_graphic_inside_a_tikz_drawing_is_part_of_that_single_figure(tmp_path: Path):
+    root = make_project(
+        tmp_path,
+        {
+            "main.tex": (
+                "\\begin{figure}\\begin{tikzpicture}\\node (b) {\\includegraphics[width=3cm]{img/board.pdf}};"
+                "\\draw (b.south west) -- (b.north east);\\end{tikzpicture}\\label{fig:b}\\end{figure}"
+            ),
+            "img/board.pdf": PDF_BYTES,
+        },
+    )
+    graph = build_source_graph(root, root / "main.tex")
+    registry = discover_figures(graph, root, root / "main.tex")
+    assert [(f.id, f.source_type, f.label, f.input_asset) for f in registry.figures] == [
+        ("main", "tikzpicture", "fig:b", None)
+    ]
+    # the graphic is still a resolved dependency, so it is staged for the drawing's render
+    assert ("img/board.pdf", "graphic") in graph.stageable_files()
+
+
+def test_standalone_graphics_next_to_drawings_keep_their_own_records(tmp_path: Path):
+    registry = discover(
+        tmp_path,
+        {
+            "main.tex": (
+                "\\begin{tikzpicture}\\node {\\includegraphics{a.png}};\\end{tikzpicture}\n"
+                "\\begin{figure}\\includegraphics{a.png}\\label{fig:a}\\end{figure}\n"
+                "\\begin{circuitikz}\\draw (0,0) to[R] (2,0);\\end{circuitikz}\n"
+                "\\includegraphics{d.pdf}"
+            ),
+            "a.png": PNG_BYTES,
+            "d.pdf": PDF_BYTES,
+        },
+    )
+    assert [(f.id, f.source_type, f.label) for f in registry.figures] == [
+        ("main", "tikzpicture", None),
+        ("a", "png", "fig:a"),
+        ("main-2", "circuitikz", None),
+        ("d", "pdf", None),
+    ]
