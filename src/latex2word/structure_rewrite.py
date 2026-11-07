@@ -536,6 +536,30 @@ def _group_shape(masked: str, brace: int) -> tuple[str, str, bool, int] | None:
     return size, align, no_indent, after
 
 
+def cell_note_shape(masked: str, start: int, end: int, base_pt: float) -> tuple[NoteShape, int]:
+    """Shape of a note written as table-cell text at ``[start, end)`` (a full-width ``\\multicolumn`` under the
+    last rule of a table) and the offset where its text starts, after the leading skips.
+
+    The leading skips (``\\vspace``, ``\\medskip`` ...) and declarations (size, alignment) give the shape, as for a
+    note group; a cell paragraph is never indented, and a note without a size declaration is ``normalsize``.
+    """
+    skip = _skip_before(masked, start, end, base_pt)
+    twips, pos = skip if skip is not None else (0, skip_ws(masked, start))
+    text_start = pos
+    size, align = "normalsize", "j"
+    for command in iter_commands(masked[:end], pos):
+        if command.start != pos:
+            break
+        if command.name in SIZE_COMMANDS:
+            size = command.name
+        elif command.name in _ALIGN_DECLARATIONS:
+            align = _ALIGN_DECLARATIONS[command.name]
+        elif command.name != "noindent":
+            break
+        pos = skip_ws(masked, command.end)
+    return NoteShape(size, align, True, twips), text_start
+
+
 def note_macros(graph: SourceGraph, base_pt: float = 10) -> dict[str, tuple[int, bool, NoteShape]]:
     """User macros whose whole body is a note block: name -> (arguments, has optional argument, shape)."""
     macros: dict[str, tuple[int, bool, NoteShape]] = {}

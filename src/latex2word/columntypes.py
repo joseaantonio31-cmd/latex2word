@@ -13,11 +13,13 @@ preamble (Pandoc ignores them).
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 from latex2word.diagnostics import Severity
 from latex2word.latex_scan import iter_commands, read_group, read_optional, scan_environments, skip_ws
 from latex2word.rewrite import Edit
 from latex2word.source_graph import Finding, SourceGraph, SourceLocation
+from latex2word.structure_rewrite import cell_note_shape
 
 # environment -> number of mandatory groups before the column specification
 TABLE_ENVIRONMENTS: dict[str, int] = {
@@ -175,14 +177,84 @@ def _simplify_multicolumns_in(text: str, types: dict) -> str:
     return "".join(out)
 
 
-def plan_longtable_rewrites(graph: SourceGraph) -> list[Edit]:
-    """Drop the per-page continuation head and foot of every ``longtable``.
+_RULE_COMMANDS = frozenset({"toprule", "midrule", "bottomrule", "hline", "specialrule", "cline", "cmidrule"})
+
+
+def _rule_end(masked: str, command_end: int, name: str) -> int | None:
+    """End offset of a horizontal rule command with its arguments; None when it is not well formed."""
+    if name in PARTIAL_RULES:
+        return _partial_rule_end(masked, command_end, name)
+    pos = command_end
+    if name == "specialrule":
+        for _ in range(3):
+            group = read_group(masked, skip_ws(masked, pos))
+            if group is None:
+                return None
+            pos = group[2]
+        return pos
+    optional = read_optional(masked, skip_ws(masked, pos)) if name != "hline" else None
+    return optional[2] if optional is not None else pos
+
+
+def _table_columns(masked: str, text: str, env: Any, types: dict[str, ColumnType]) -> int | None:
+    """Number of columns of the ``longtable`` ``env`` (its preamble after the optional ``[c]``)."""
+    pos = skip_ws(masked, env.content_start)
+    optional = read_optional(masked, pos)
+    if optional is not None:
+        pos = skip_ws(masked, optional[2])
+    group = read_group(masked, pos)
+    columns = spec_columns(text[group[0] : group[1]], types) if group is not None else None
+    return len(columns) if columns else None
+
+
+def _trailing_notes(masked: str, begin: int, end: int, columns: int | None) -> tuple[int, list[tuple[int, int]]] | None:
+    """Notes at the end of a final foot ``[begin, end)``: the rows after its last rule that are each one
+    ``\\multicolumn`` spanning the whole table. Returns ``(offset where those rows start, content spans)``,
+    or None when the foot does not end that way (then it is a table row, e.g. a total, and stays one)."""
+    rows_start = None
+    for command in iter_commands(masked[:end], begin):
+        if command.name in _RULE_COMMANDS:
+            rule_end = _rule_end(masked, command.end, command.name)
+            if rule_end is None:
+                return None
+            rows_start = rule_end
+    if rows_start is None or columns is None:
+        return None
+    notes: list[tuple[int, int]] = []
+    pos = skip_ws(masked, rows_start)
+    while pos < end:
+        command = next(iter_commands(masked[:end], pos), None)
+        if command is None or command.start != pos or command.name != "multicolumn":
+            return None
+        count = read_group(masked, skip_ws(masked, command.end))
+        spec = read_group(masked, skip_ws(masked, count[2])) if count else None
+        content = read_group(masked, skip_ws(masked, spec[2])) if spec else None
+        if content is None or masked[count[0] : count[1]].strip() != str(columns):
+            return None
+        notes.append((content[0], content[1]))
+        pos = skip_ws(masked, content[2])
+        if masked.startswith("\\\\", pos):
+            pos += 2
+            optional = read_optional(masked, skip_ws(masked, pos))
+            pos = skip_ws(masked, optional[2] if optional is not None else pos)
+        elif pos < end:
+            return None
+    return (rows_start, notes) if notes else None
+
+
+def plan_longtable_rewrites(graph: SourceGraph, base_pt: float = 10.0) -> list[Edit]:
+    """Drop the per-page continuation head and foot of every ``longtable``; move its final foot.
 
     Pandoc's reader puts the rows of ``\\endhead`` (when ``\\endfirsthead`` also
     exists) and of ``\\endfoot`` (when ``\\endlastfoot`` also exists) into the
     table body, so a "continued" header and a "continued on the next page" note
     become content rows. They only exist for page breaks, which Word handles
     with its own repeated header row.
+
+    The final foot is printed under the last row, so its rows move to the end of the body. A note written in it
+    as full-width ``\\multicolumn`` rows under the last rule (``\\bottomrule``) is printed *below* the table: it
+    becomes a note block after ``\\end{longtable}``, like the notes written after a table, instead of a table row
+    that would take the table's bottom border and read as data.
     """
     edits: list[Edit] = []
     types, _ = collect_column_types(graph)
@@ -210,16 +282,29 @@ def plan_longtable_rewrites(graph: SourceGraph) -> list[Edit]:
                                       f"longtable per-page continuation block (\\{name}) removed: Pandoc would "
                                       "turn it into body rows", "longtable"))
                 elif move and previous_end is not None:
-                    rows = strip_partial_rules(_simplify_multicolumns_in(scanned.text[previous_end:start], types))
-                    if rows.strip():
-                        body = masked[end : env.content_end].rstrip()
-                        joiner = "" if body.endswith("\\\\") or not body else "\\\\"
+                    notes = _trailing_notes(masked, previous_end, start, _table_columns(masked, scanned.text, env, types))
+                    rows_end = notes[0] if notes else start
+                    rows = strip_partial_rules(_simplify_multicolumns_in(scanned.text[previous_end:rows_end], types))
+                    if rows.strip() or notes:
                         edits.append(Edit(rel, previous_end, end, "", "longtable-foot",
                                           f"longtable final foot (\\{name}) moved after the last row, where it is printed",
                                           "longtable"))
+                    if rows.strip():
+                        body = masked[end : env.content_end].rstrip()
+                        joiner = "" if body.endswith("\\\\") or not body else "\\\\"
                         edits.append(Edit(rel, env.content_end, env.content_end, f"{joiner} {rows.strip()}\n",  # no blank line: \par ends the table
                                           "longtable-foot", "longtable final foot rows placed after the last row",
                                           "longtable"))
+                    if notes:
+                        blocks = []
+                        for content_start, content_end in notes[1]:
+                            shape, text_start = cell_note_shape(masked, content_start, content_end, base_pt)
+                            marker = shape.marker("o")
+                            note = scanned.text[text_start:content_end].strip()
+                            blocks.append(f"\n\\begin{{{marker}}}{{{note}\\par}}\\end{{{marker}}}")
+                        edits.append(Edit(rel, env.end, env.end, "".join(blocks) + "\n", "longtable-note",
+                                          "full-width note row of the longtable final foot placed below the table, "
+                                          "as a note block, where it is printed", "longtable"))
                 previous_end = end
     return edits
 
@@ -235,6 +320,12 @@ def simplify_cell_spec(spec: str, types: dict[str, ColumnType]) -> str | None:
     decorations (``@{}p{\\textwidth}@{}``); they only adjust TeX's spacing. None when the spec does not
     reduce to exactly one column.
     """
+    columns = spec_columns(spec, types)
+    return columns[0] if columns is not None and len(columns) == 1 else None
+
+
+def spec_columns(spec: str, types: dict[str, ColumnType]) -> list[str] | None:
+    """The column types of a table or cell spec, without decorations and rules; None when it cannot be read."""
     try:
         expanded = expand_spec(spec, types)
     except ValueError:
@@ -261,7 +352,7 @@ def simplify_cell_spec(spec: str, types: dict[str, ColumnType]) -> str | None:
             i += 1
         else:
             return None
-    return columns[0] if len(columns) == 1 else None
+    return columns
 
 
 def plan_multicolumn_rewrites(graph: SourceGraph, types: dict[str, ColumnType] | None = None) -> list[Edit]:
