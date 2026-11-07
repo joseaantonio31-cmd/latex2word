@@ -152,3 +152,7 @@ The suite passes completely with Pandoc 3.12 and 3.13; figure tests use fake too
 Pandoc that fails the compatibility probe, the build tests stop at the compatibility check by design. The integration
 tests are deselected by default and need an external project and a local expectations file (see
 [docs/development.md](docs/development.md)).
+
+Continuous integration ([.github/workflows/tests.yml](.github/workflows/tests.yml)) runs the default suite on
+Windows for every push to `main` and every pull request: Python 3.11 and 3.14 with the certified Pandoc 3.12, and
+Python 3.14 with Pandoc 3.13. The integration tests are not run there.
