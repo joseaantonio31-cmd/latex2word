@@ -1,0 +1,57 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pytest:
+    name: Python ${{ matrix.python }} / Pandoc ${{ matrix.pandoc }}
+    # Windows 11 is the validated platform. The default suite needs only Python and Pandoc: figure tests use
+    # fake tool runners, and the tests that need TeX, dvisvgm or Word are marked `integration` (deselected).
+    runs-on: windows-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {python: "3.11", pandoc: "3.12"}  # minimum Python, certified Pandoc
+          - {python: "3.14", pandoc: "3.12"}  # development Python, certified Pandoc
+          - {python: "3.14", pandoc: "3.13"}  # TESTED_UNCERTIFIED Pandoc
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install Pandoc ${{ matrix.pandoc }}
+        shell: pwsh
+        run: |
+          $version = '${{ matrix.pandoc }}'
+          $zip = Join-Path $env:RUNNER_TEMP "pandoc-$version.zip"
+          Invoke-WebRequest -Uri "https://github.com/jgm/pandoc/releases/download/$version/pandoc-$version-windows-x86_64.zip" -OutFile $zip
+          Expand-Archive -Path $zip -DestinationPath $env:RUNNER_TEMP
+          Join-Path $env:RUNNER_TEMP "pandoc-$version" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Show toolchain
+        run: |
+          python --version
+          pandoc --version
+
+      - name: Install latex2word
+        run: python -m pip install -e ".[dev]"
+
+      - name: Run tests
+        run: python -m pytest -ra

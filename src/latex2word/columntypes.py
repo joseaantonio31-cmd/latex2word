@@ -210,7 +210,7 @@ def plan_longtable_rewrites(graph: SourceGraph) -> list[Edit]:
                                       f"longtable per-page continuation block (\\{name}) removed: Pandoc would "
                                       "turn it into body rows", "longtable"))
                 elif move and previous_end is not None:
-                    rows = _simplify_multicolumns_in(scanned.text[previous_end:start], types)
+                    rows = strip_partial_rules(_simplify_multicolumns_in(scanned.text[previous_end:start], types))
                     if rows.strip():
                         body = masked[end : env.content_end].rstrip()
                         joiner = "" if body.endswith("\\\\") or not body else "\\\\"
@@ -287,6 +287,71 @@ def plan_multicolumn_rewrites(graph: SourceGraph, types: dict[str, ColumnType] |
                 edits.append(Edit(rel, spec[0], spec[1], simple, "column-type",
                                   "\\multicolumn spec reduced to its column type (Pandoc loses decorated cells)",
                                   "multicolumn"))
+    return edits
+
+
+# partial horizontal rules: \cline{a-b} and booktabs' \cmidrule[width](trim){a-b}
+PARTIAL_RULES = frozenset({"cline", "cmidrule"})
+
+
+def _partial_rule_end(masked: str, command_end: int, name: str) -> int | None:
+    """End offset of a ``\\cline``/``\\cmidrule`` with its arguments; None when it is not well formed."""
+    pos = command_end
+    if name == "cmidrule":
+        optional = read_optional(masked, skip_ws(masked, pos))
+        if optional is not None:
+            pos = optional[2]
+        start = skip_ws(masked, pos)
+        if start < len(masked) and masked[start] == "(":
+            close = masked.find(")", start)
+            if close < 0 or "{" in masked[start:close] or "\\" in masked[start:close]:
+                return None
+            pos = close + 1
+    group = read_group(masked, skip_ws(masked, pos))
+    if group is None or not masked[group[0] : group[1]].strip():
+        return None
+    return group[2]
+
+
+def strip_partial_rules(text: str) -> str:
+    """``text`` (table rows) without its well-formed ``\\cline``/``\\cmidrule`` commands."""
+    pieces: list[str] = []
+    cursor = 0
+    for command in iter_commands(text):
+        if command.name in PARTIAL_RULES and command.start >= cursor:
+            end = _partial_rule_end(text, command.end, command.name)
+            if end is not None:
+                pieces.append(text[cursor : command.start])
+                cursor = end
+    pieces.append(text[cursor:])
+    return "".join(pieces)
+
+
+def plan_partial_rule_rewrites(graph: SourceGraph) -> list[Edit]:
+    """Edits removing ``\\cline`` and ``\\cmidrule`` from the table environments of the staged copy.
+
+    Pandoc's LaTeX reader consumes only the command name of these partial rules: the column range
+    (``{2-3}``) and booktabs' trim (``(lr)``) become text at the start of the next row's first cell
+    ("2-3(lr)5-6 Heading"). The rules carry no text and Word tables take their borders from the profile,
+    so removing them loses nothing that the conversion could keep.
+    """
+    edits: list[Edit] = []
+    for rel in graph.tex_order:
+        scanned = graph.files.get(rel)
+        if scanned is None:
+            continue
+        masked = scanned.masked
+        tables, _ = scan_environments(masked, tuple(TABLE_ENVIRONMENTS))
+        for env in tables:
+            for command in iter_commands(masked[: env.content_end], env.content_start):
+                if command.name not in PARTIAL_RULES:
+                    continue
+                end = _partial_rule_end(masked, command.end, command.name)
+                if end is None or end > env.content_end:
+                    continue
+                edits.append(Edit(rel, command.start, end, "", "table-rule",
+                                  f"\\{command.name} removed: Pandoc would leave its column range as cell text; "
+                                  "table borders come from the profile", command.name))
     return edits
 
 

@@ -30,6 +30,7 @@ from latex2word.columntypes import (
     plan_column_type_rewrites,
     plan_longtable_rewrites,
     plan_multicolumn_rewrites,
+    plan_partial_rule_rewrites,
     simplify_cell_spec,
 )
 from latex2word.diagnostics import Severity
@@ -129,6 +130,44 @@ def test_final_foot_with_a_decorated_multicolumn_note_moves_after_the_last_row(t
     text = apply(graph, drop_contained([*plan_longtable_rewrites(graph), *plan_multicolumn_rewrites(graph)]))
     assert "\\multicolumn{2}{p{\\textwidth}}{\\textit{Nota.} Texto}" in text  # decorations dropped in the moved copy
     assert text.index("x & y") < text.index("\\bottomrule") < text.index("Nota.") < text.index("\\end{longtable}")
+
+
+def test_partial_rules_are_removed_from_tables_only(tmp_path: Path):
+    main = (
+        "\\documentclass{article}\\usepackage{booktabs,tabularx}\\begin{document}\n"
+        "\\begin{tabular}{llll}\\toprule\n& \\multicolumn{3}{c}{Grupo} \\\\\n"
+        "\\cmidrule(lr){2-2}\\cmidrule[0.4pt](l){3-4} \\cmidrule{1-1}\n"
+        "A & B & C & D \\\\\n\\cline{2-3}\nE & F & G & H \\\\\n\\bottomrule\\end{tabular}\n"
+        "\\begin{tabularx}{\\textwidth}{lX}\\cmidrule(r){1-2}\nx & y \\\\\n\\end{tabularx}\n"
+        "Fuera de una tabla: \\cline{1-2} queda intacto.\n"
+        "\\end{document}\n"
+    )
+    graph = graph_of(tmp_path, main)
+    edits = plan_partial_rule_rewrites(graph)
+    assert [e.subject for e in edits] == ["cmidrule", "cmidrule", "cmidrule", "cline", "cmidrule"]
+    assert all(e.kind == "table-rule" and e.replacement == "" for e in edits)
+    text = apply(graph, edits)
+    assert "\\cmidrule" not in text and "(lr)" not in text and "{2-2}" not in text and "{3-4}" not in text
+    assert "\nA & B & C & D \\\\\n\nE & F" in text  # rows untouched; only the rules are gone
+    assert "\\toprule" in text and "\\bottomrule" in text and "\\multicolumn{3}{c}{Grupo}" in text
+    assert "Fuera de una tabla: \\cline{1-2} queda intacto." in text
+
+
+def test_malformed_partial_rule_is_left_for_pandoc(tmp_path: Path):
+    main = "\\begin{tabular}{ll}a & b \\\\\n\\cmidrule(lr x & y \\\\\n\\end{tabular}\n"
+    assert plan_partial_rule_rewrites(graph_of(tmp_path, main)) == []
+
+
+def test_partial_rules_are_dropped_from_a_moved_longtable_foot(tmp_path: Path):
+    main = (
+        "\\documentclass{report}\\usepackage{longtable,booktabs}\\begin{document}\n"
+        "\\begin{longtable}{lll}\n\\caption{C}\\\\\nH1 & H2 & H3\\\\\n\\endfirsthead\n"
+        "\\cmidrule(lr){2-3}\nTotal & 1 & 2\\\\\n\\endlastfoot\nx & y & z\\\\\n\\end{longtable}\n\\end{document}\n"
+    )
+    graph = graph_of(tmp_path, main)
+    text = apply(graph, drop_contained([*plan_longtable_rewrites(graph), *plan_partial_rule_rewrites(graph)]))
+    assert "\\cmidrule" not in text and "{2-3}" not in text
+    assert text.index("x & y & z") < text.index("Total & 1 & 2") < text.index("\\end{longtable}")
 
 
 @pytest.mark.parametrize(
