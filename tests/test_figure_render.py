@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 import pytest
@@ -119,6 +120,114 @@ def test_tikz_dvisvgm_timeout_and_failure(tmp_path: Path):
 def test_tikz_malformed_or_missing_renderer_output_fails(tmp_path: Path, svg: str | None, fragment: str):
     result = render(tmp_path, ScriptedRunner(tikz_handler(svg=svg)))
     assert not result.ok and fragment in result.error
+
+
+@pytest.mark.parametrize(
+    "warning",
+    [
+        "WARNING: file './img/board.pdf' not found",
+        "WARNING: PDF support not available (Ghostscript not found)",
+        "WARNING: can't process image file 'img/board.png'",
+    ],
+)
+def test_tikz_graphic_that_dvisvgm_could_not_render_is_an_error_not_a_partial_svg(tmp_path: Path, warning: str):
+    base = tikz_handler()
+
+    def handler(argv: tuple[str, ...], cwd: Path | None) -> CommandResult:
+        result = base(argv, cwd)
+        if Path(argv[0]).name == "dvisvgm":  # writes a valid SVG of the rest of the drawing, exit code 0
+            return ok_result(argv, stderr=f"processing page 1\n  {warning}\n  output written\n")
+        return result
+
+    result = render(tmp_path, ScriptedRunner(handler))
+    assert not result.ok and warning in result.error and "could not process a graphic" in result.error
+
+
+def test_unrelated_dvisvgm_messages_do_not_fail_a_render(tmp_path: Path):
+    base = tikz_handler()
+
+    def handler(argv: tuple[str, ...], cwd: Path | None) -> CommandResult:
+        result = base(argv, cwd)
+        if Path(argv[0]).name == "dvisvgm":
+            return ok_result(argv, stderr="pre-processing DVI file (format version 2)\nprocessing page 1\n")
+        return result
+
+    assert render(tmp_path, ScriptedRunner(handler)).ok
+
+
+# ---- real toolchain: a drawing that embeds an external PDF ------------------------------------------
+
+
+def _pdf_with_a_filled_square(rgb: str) -> bytes:
+    """A one-page 100 x 100 bp PDF whose only content is a square filled with ``rgb`` (e.g. ``"0 0 1"``)."""
+    stream = f"{rgb} rg 10 10 80 80 re f".encode("ascii")
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Contents 4 0 R /Resources << >> >>",
+        b"<< /Length %d >>\nstream\n" % len(stream) + stream + b"\nendstream",
+    ]
+    out = bytearray(b"%PDF-1.4\n")
+    offsets = []
+    for number, body in enumerate(objects, start=1):
+        offsets.append(len(out))
+        out += b"%d 0 obj\n" % number + body + b"\nendobj\n"
+    xref = len(out)
+    out += b"xref\n0 %d\n0000000000 65535 f \n" % (len(objects) + 1)
+    out += b"".join(b"%010d 00000 n \n" % offset for offset in offsets)
+    out += b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (len(objects) + 1, xref)
+    return bytes(out)
+
+
+_EMBEDDING_DOCUMENT = (
+    "\\documentclass[border=2pt]{standalone}\n"
+    "\\def\\pgfsysdriver{pgfsys-dvisvgm.def}\n"
+    "\\usepackage[dvisvgm]{graphicx}\n"
+    "\\usepackage{tikz}\n"
+    "\\graphicspath{{./img/}}\n"
+    "\\begin{document}\n"
+    "\\begin{tikzpicture}\n"
+    "\\node[inner sep=0] (b) {\\includegraphics[bb=0 0 100 100, width=2cm]{board.pdf}};\n"
+    "\\draw[red] (b.south west) -- (b.north east);\n"
+    "\\end{tikzpicture}\n"
+    "\\end{document}\n"
+)
+
+
+def _real_render(tmp_path: Path, document: str):
+    source_dir = tmp_path / "staging"
+    (source_dir / "img").mkdir(parents=True)
+    (source_dir / "img" / "board.pdf").write_bytes(_pdf_with_a_filled_square("0 0 1"))
+    result = render_tikz(
+        "fig", document, tmp_path / "render" / "fig", tmp_path / "out" / "fig.svg", timeout=120, source_dir=source_dir
+    )
+    return result, source_dir
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(not (shutil.which("latex") and shutil.which("dvisvgm")), reason="needs latex and dvisvgm")
+def test_real_drawing_keeps_the_content_of_an_embedded_pdf(tmp_path: Path):
+    result, source_dir = _real_render(tmp_path, _EMBEDDING_DOCUMENT)
+    assert result.ok, result.error
+    svg = (tmp_path / "out" / "fig.svg").read_text(encoding="utf-8").lower()
+    assert any(blue in svg for blue in ("#00f'", '#00f"', "#0000ff", "rgb(0,0,255)")), "the PDF's square is missing"
+    assert "#f00" in svg or "#ff0000" in svg  # the TikZ line drawn over it
+    assert sorted(p.name for p in source_dir.rglob("*")) == ["board.pdf", "img"]  # nothing written beside sources
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(not (shutil.which("latex") and shutil.which("dvisvgm")), reason="needs latex and dvisvgm")
+def test_real_drawing_without_external_graphics_is_unchanged(tmp_path: Path):
+    plain = _EMBEDDING_DOCUMENT.replace(
+        "\\node[inner sep=0] (b) {\\includegraphics[bb=0 0 100 100, width=2cm]{board.pdf}};\n",
+        "\\node[draw, minimum size=2cm] (b) {};\n",
+    )
+    with_source, _ = _real_render(tmp_path / "a", plain)
+    without_source = render_tikz(
+        "fig", plain, tmp_path / "b" / "render", tmp_path / "b" / "fig.svg", timeout=120, source_dir=None
+    )
+    assert with_source.ok and without_source.ok, (with_source.error, without_source.error)
+    assert (tmp_path / "a" / "out" / "fig.svg").read_bytes() == (tmp_path / "b" / "fig.svg").read_bytes()
 
 
 # ---- PDF chain ----------------------------------------------------------------------------------------

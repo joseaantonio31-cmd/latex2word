@@ -385,9 +385,12 @@ def plan_figure_rewrites(run: FiguresRun, main_rel: str) -> FigurePlan:
             )
         # 2. \includegraphics commands (PDF re-pointing and width normalisation for all)
         queues = {key: list(value) for key, value in by_asset.items() if key[0] == rel}
+        drawings = [o.record.span for o in tikz_by_file.get(rel, []) if o.record.span is not None]
         for edge in graph.edges:
             if edge.source != rel or edge.kind is not EdgeKind.GRAPHIC or edge.resolution is not Resolution.OK:
                 continue
+            if any(begin <= edge.offset < end for begin, end in drawings):
+                continue  # part of a drawing replaced above as a whole; TeX already applied its options
             include = _parse_include(masked, text, edge.offset)
             if include is None:
                 continue

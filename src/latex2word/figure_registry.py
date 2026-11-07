@@ -208,6 +208,10 @@ def _figures_in_file(
         items.append((env.begin, "tikz", env))
     for edge in graph.edges:
         if edge.source == scanned.rel and edge.kind is EdgeKind.GRAPHIC and edge.resolution is Resolution.OK:
+            # a graphic inside a TikZ/circuitikz environment is part of that drawing's single rendered SVG,
+            # not a figure of its own; its file stays a staged dependency of the source graph
+            if any(env.begin <= edge.offset < env.end for env in tikz):
+                continue
             items.append((edge.offset, "graphic", edge))
     items.sort(key=lambda item: item[0])
 
