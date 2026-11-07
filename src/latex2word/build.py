@@ -367,13 +367,10 @@ def run_build(
         graph, place_bibliography=bib_plan.mode == "citeproc", follow_pagination=profile.layout.pagination.follow_source
     )
     default_text = profile.layout.typography.get("default")
-    typeset_edits, typeset_findings = plan_typesetting_rewrites(
-        graph, (default_text.size_pt if default_text is not None and default_text.size_pt else 10.0)
-    )
+    base_pt = default_text.size_pt if default_text is not None and default_text.size_pt else 10.0
+    typeset_edits, typeset_findings = plan_typesetting_rewrites(graph, base_pt)
     result.findings.extend(typeset_findings)
-    note_edits, note_spans = plan_note_rewrites(
-        graph, (default_text.size_pt if default_text is not None and default_text.size_pt else 10.0)
-    )
+    note_edits, note_spans = plan_note_rewrites(graph, base_pt)
     # a note block keeps its own declarations: no other typesetting marker inside it
     typeset_edits = [
         e for e in typeset_edits if not any(f == e.file and a <= e.start < b for f, a, b in note_spans)
@@ -396,7 +393,7 @@ def run_build(
     copy_assets(figure_plan, workspace.path, staging)
     # a table inside a drawing that is replaced by its SVG needs no column expansion: the outer edit wins
     content_edits = [*figure_plan.edits, *column_plan.edits, *structure_plan.edits, *typeset_edits, *note_edits,
-                     *siunitx_plan.edits, *plan_longtable_rewrites(graph), *plan_multicolumn_rewrites(graph),
+                     *siunitx_plan.edits, *plan_longtable_rewrites(graph, base_pt), *plan_multicolumn_rewrites(graph),
                      *plan_partial_rule_rewrites(graph), *bib_plan.edits, *extraction.edits]
     marker_edits, occurrences = _reference_markers(graph, content_edits)
     edits = drop_contained([*content_edits, *marker_edits])

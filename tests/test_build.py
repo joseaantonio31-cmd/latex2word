@@ -207,6 +207,50 @@ def test_cmidrule_and_cline_ranges_do_not_leak_into_table_cells(tmp_path: Path):
     assert not [c for c in cells if re.match(r"\(?[lr]*\)?\d+-\d+", c)], cells
 
 
+def test_longtable_final_foot_note_is_a_paragraph_after_the_whole_table(tmp_path: Path):
+    import re
+
+    long_cell = " ".join(["texto largo que obliga a partir la celda en varias líneas"] * 4)
+    long_note = " ".join(["La nota explica el origen de los datos y sus reservas."] * 5)
+    main = (
+        "\\documentclass{report}\\usepackage{longtable,booktabs}\\begin{document}\n"
+        "\\chapter{Tablas}\n"
+        "\\begin{longtable}{@{}p{2cm}p{3cm}p{3cm}p{4cm}@{}}\n"
+        "\\caption{Tabla larga con nota}\\label{tab:larga}\\\\\n"
+        "\\toprule\nA & B & C & D \\\\\n\\midrule\n\\endfirsthead\n"
+        "\\toprule\nA & B & C & D \\\\\n\\midrule\n\\endhead\n"
+        "\\midrule\n\\multicolumn{4}{r@{}}{\\footnotesize Continúa en la página siguiente.}\\\\\n\\endfoot\n"
+        "\\bottomrule\n"
+        f"\\multicolumn{{4}}{{@{{}}p{{\\textwidth}}@{{}}}}{{%\n  \\vspace{{4pt}}\\footnotesize\\textit{{Nota.}} {long_note}}}\\\\\n"
+        "\\endlastfoot\n"
+        "uno & dos & tres & cuatro \\\\\n"
+        f"cinco & seis & siete & {long_cell} \\\\\n"
+        "\\end{longtable}\n"
+        "Ver el \\ref{tab:larga}.\n\\end{document}\n"
+    )
+    _, result = build(tmp_path, "inline_bib", edit={"main.tex": main})
+    assert result.ok, [str(f) for f in result.findings if f.severity is not Severity.INFO]
+    xml = zipfile.ZipFile(result.output).read("word/document.xml").decode("utf-8")
+    text = lambda fragment: re.sub(r"<[^>]+>", "", fragment)  # noqa: E731
+
+    # nothing in the document is positioned out of the flow, and no row has a fixed height
+    for construct in ("<w:tblpPr", "<w:framePr", "<wp:anchor", "w:hRule=\"exact\"", "<w:trHeight"):
+        assert construct not in xml, construct
+    tables = re.findall(r"<w:tbl>.*?</w:tbl>", xml, flags=re.S)
+    table = next(t for t in tables if "Tabla larga con nota" in t)
+    rows = re.findall(r"<w:tr[ >].*?</w:tr>", table, flags=re.S)
+    # the note is not a table row: the last row is the wrapped data row, which grows with its content
+    assert "Nota." not in text(table) and "Continúa" not in text(table)
+    assert text(rows[-1]).startswith("cinco") and long_cell.split()[-1] in text(rows[-1])
+    # the note follows the complete table in the normal flow, as a note paragraph
+    after = xml[xml.index(table) + len(table) :]
+    first_paragraph = re.search(r"<w:p[ >].*?</w:p>", after, flags=re.S).group(0)
+    assert text(first_paragraph).startswith("Nota.") and long_note.split()[-1] in text(first_paragraph)
+    styles = zipfile.ZipFile(result.output).read("word/styles.xml").decode("utf-8")
+    style_id = re.search(r'<w:pStyle w:val="([^"]+)"', first_paragraph).group(1)
+    assert re.search(rf'w:styleId="{style_id}".*?<w:name w:val="Caption Note"', styles, flags=re.S)
+
+
 # ---------------------------------------------------------------- inline (manual) bibliography
 
 

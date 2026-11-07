@@ -119,17 +119,51 @@ def test_longtable_continuation_head_and_foot_are_removed(tmp_path: Path):
     assert "\\endlastfoot" not in text and text.index("x & y") < text.index("\\hline")
 
 
-def test_final_foot_with_a_decorated_multicolumn_note_moves_after_the_last_row(tmp_path: Path):
+def test_final_foot_row_with_a_decorated_multicolumn_moves_after_the_last_row(tmp_path: Path):
     main = (
         "\\documentclass{report}\\usepackage{longtable,booktabs}\\begin{document}\n"
-        "\\begin{longtable}{@{}ll@{}}\n\\caption{C}\\\\\nH1 & H2\\\\\n\\endfirsthead\n\\bottomrule\n"
-        "\\multicolumn{2}{@{}p{\\textwidth}@{}}{\\textit{Nota.} Texto}\\\\\n\\endlastfoot\nx & y\\\\\n\\end{longtable}\n"
+        "\\begin{longtable}{@{}ll@{}}\n\\caption{C}\\\\\nH1 & H2\\\\\n\\endfirsthead\n"
+        "\\multicolumn{2}{@{}p{\\textwidth}@{}}{Total}\\\\\n\\bottomrule\n\\endlastfoot\nx & y\\\\\n\\end{longtable}\n"
         "\\end{document}\n"
     )
     graph = graph_of(tmp_path, main)
     text = apply(graph, drop_contained([*plan_longtable_rewrites(graph), *plan_multicolumn_rewrites(graph)]))
-    assert "\\multicolumn{2}{p{\\textwidth}}{\\textit{Nota.} Texto}" in text  # decorations dropped in the moved copy
-    assert text.index("x & y") < text.index("\\bottomrule") < text.index("Nota.") < text.index("\\end{longtable}")
+    # above the last rule the full-width cell is a table row: it stays in the table, decorations dropped
+    assert "\\multicolumn{2}{p{\\textwidth}}{Total}" in text and "l2wnote" not in text
+    assert text.index("x & y") < text.index("Total") < text.index("\\bottomrule") < text.index("\\end{longtable}")
+
+
+def test_final_foot_note_under_the_last_rule_becomes_a_note_block_below_the_table(tmp_path: Path):
+    main = (
+        "\\documentclass{report}\\usepackage{longtable,booktabs}\\begin{document}\n"
+        "\\begin{longtable}{@{}lll@{}}\n\\caption{C}\\\\\nH1 & H2 & H3\\\\\n\\endfirsthead\n"
+        "\\midrule\n\\multicolumn{3}{r@{}}{\\footnotesize Continúa}\\\\\n\\endfoot\n\\bottomrule\n"
+        "\\multicolumn{3}{@{}p{\\textwidth}@{}}{%\n  \\vspace{4pt}\\footnotesize\\textit{Nota.} Primera nota.}\\\\\n"
+        "\\multicolumn{3}{l}{\\raggedright Segunda nota \\ref{x}.}\n"
+        "\\endlastfoot\nx & y & z\\\\\n\\end{longtable}\n"
+        "Texto siguiente.\n\\end{document}\n"
+    )
+    graph = graph_of(tmp_path, main)
+    text = apply(graph, drop_contained([*plan_longtable_rewrites(graph, 12.0), *plan_multicolumn_rewrites(graph)]))
+    table = text[text.index("\\begin{longtable}") : text.index("\\end{longtable}")]
+    after = text[text.index("\\end{longtable}") : text.index("Texto siguiente.")]
+    # the bottom rule stays the table's last line; no note text and no multicolumn note row inside the table
+    assert table.rstrip().endswith("\\bottomrule") and "Nota" not in table and "Segunda" not in table
+    assert "Continúa" not in table  # per-page continuation foot dropped as before
+    # each note is a note block below the table: its leading skip (4 pt = 80 twips) and declarations give the shape
+    assert "\\begin{l2wnote-footnotesize-j-n-80-o}{\\footnotesize\\textit{Nota.} Primera nota.\\par}" in after
+    assert "\\begin{l2wnote-normalsize-l-n-0-o}{\\raggedright Segunda nota \\ref{x}.\\par}" in after
+    assert after.index("Primera") < after.index("Segunda")
+
+
+def test_partial_width_foot_row_under_the_rule_stays_in_the_table(tmp_path: Path):
+    main = (
+        "\\begin{longtable}{lll}\nH1 & H2 & H3\\\\\n\\endfirsthead\n\\bottomrule\n"
+        "\\multicolumn{2}{l}{Parcial} & 3\\\\\n\\endlastfoot\nx & y & z\\\\\n\\end{longtable}\n"
+    )
+    graph = graph_of(tmp_path, main)
+    text = apply(graph, plan_longtable_rewrites(graph))
+    assert "l2wnote" not in text and text.index("x & y & z") < text.index("Parcial") < text.index("\\end{longtable}")
 
 
 def test_partial_rules_are_removed_from_tables_only(tmp_path: Path):
