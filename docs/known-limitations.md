@@ -45,6 +45,9 @@ latex2word is an experimental private preview. The limitations below are known a
 - Contents lists use Word's own entry text: list entries show the caption text ("Table 2.1. …") rather than a
   separate number column, and spacing between chapter groups is not reproduced.
 - Spacing that LaTeX adds around floats and long tables (`\textfloatsep`, `\LTpost`) is not reproduced exactly.
+- Partial table rules (`\cline`, booktabs `\cmidrule`) are not drawn: Word tables take their borders from the
+  profile. They are removed from the staged copy because Pandoc's reader would otherwise leave their column range
+  (`2-3`, `(lr)`) as text in the next row's first cell.
 
 ## Toolchain
 
