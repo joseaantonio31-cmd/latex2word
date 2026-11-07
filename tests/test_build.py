@@ -182,6 +182,31 @@ def test_widths_pandoc_cannot_read_are_normalised_so_the_image_is_not_left_at_in
     assert "\\columnwidth" not in staged and staged.count("width=0.98\\linewidth") == 3
 
 
+# ---------------------------------------------------------------- partial table rules
+
+
+def test_cmidrule_and_cline_ranges_do_not_leak_into_table_cells(tmp_path: Path):
+    tables = (
+        "\\documentclass{article}\\usepackage{booktabs}\\begin{document}\n"
+        "\\section{Tablas}\n"
+        "\\begin{table}\\centering\\caption{Reglas parciales}\\label{tab:r}\n"
+        "\\begin{tabular}{llll}\\toprule\n& \\multicolumn{3}{c}{Grupo} \\\\\n"
+        "\\cmidrule(lr){2-2}\\cmidrule(lr){3-3}\\cmidrule(l){4-4}\n"
+        "Nombre & Uno & Dos & Tres \\\\\n\\midrule\nfila & 1 & 2 & 3 \\\\\n\\cline{2-3}\n"
+        "otra & 4 & 5 & 6 \\\\\n\\bottomrule\n\\end{tabular}\n\\end{table}\n"
+        "Ver el \\ref{tab:r}.\n\\end{document}\n"
+    )
+    _, result = build(tmp_path, "inline_bib", edit={"main.tex": tables})
+    assert result.ok, [str(f) for f in result.findings if f.severity is not Severity.INFO]
+    xml = zipfile.ZipFile(result.output).read("word/document.xml").decode("utf-8")
+    import re
+
+    cells = [re.sub(r"<[^>]+>", "", c).strip() for c in re.findall(r"<w:tc>.*?</w:tc>", xml, flags=re.S)]
+    assert "Grupo" in cells
+    assert "Nombre" in cells and "otra" in cells  # exact cell texts: nothing glued in front of them
+    assert not [c for c in cells if re.match(r"\(?[lr]*\)?\d+-\d+", c)], cells
+
+
 # ---------------------------------------------------------------- inline (manual) bibliography
 
 

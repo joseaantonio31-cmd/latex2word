@@ -64,7 +64,9 @@ from latex2word.process import run_command
 from latex2word.profiles import Profile, load_profile
 from latex2word.reference_doc import ReferenceDoc, build_reference_docx
 from latex2word.review import build_layout_report, render_visual_review, write_layout_report, write_visual_review
-from latex2word.columntypes import plan_column_type_rewrites, plan_longtable_rewrites, plan_multicolumn_rewrites
+from latex2word.columntypes import (
+    plan_column_type_rewrites, plan_longtable_rewrites, plan_multicolumn_rewrites, plan_partial_rule_rewrites,
+)
 from latex2word.structure_rewrite import (
     contents_titles, plan_note_rewrites, plan_structure_rewrites, plan_typesetting_rewrites,
 )
@@ -395,7 +397,7 @@ def run_build(
     # a table inside a drawing that is replaced by its SVG needs no column expansion: the outer edit wins
     content_edits = [*figure_plan.edits, *column_plan.edits, *structure_plan.edits, *typeset_edits, *note_edits,
                      *siunitx_plan.edits, *plan_longtable_rewrites(graph), *plan_multicolumn_rewrites(graph),
-                     *bib_plan.edits, *extraction.edits]
+                     *plan_partial_rule_rewrites(graph), *bib_plan.edits, *extraction.edits]
     marker_edits, occurrences = _reference_markers(graph, content_edits)
     edits = drop_contained([*content_edits, *marker_edits])
     records, changes = apply_edits(graph, staging, edits)
